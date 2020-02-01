@@ -35,3 +35,20 @@
 
 [What is the difference between new/delete and malloc/free?
 ](https://stackoverflow.com/questions/240212/what-is-the-difference-between-new-delete-and-malloc-free?r=SearchResults)
+
+
+
+### When should static_cast, dynamic_cast, const_cast and reinterpret_cast be used?
+> **static_cast** is the first cast you should attempt to use. It does things like implicit conversions between types (such as int to float, or pointer to void*), and it can also call explicit conversion functions (or implicit ones). 
+
+> **const_cast** can be used to remove or add const to a variable; no other C++ cast is capable of removing it (not even reinterpret_cast)
+
+> **dynamic_cast** is exclusively used for handling polymorphism. You can cast a pointer or reference to any polymorphic type to any other class type (a polymorphic type has at least one virtual function, declared or inherited). 
+
+> **reinterpret_cast** is the most dangerous cast, and should be used very sparingly.
+
+C-style casts also ignore access control when performing a static_cast, which means that they have the ability to perform an operation that no other cast can.
+
+[Read more:](https://stackoverflow.com/questions/332030/when-should-static-cast-dynamic-cast-const-cast-and-reinterpret-cast-be-used)
+
+
