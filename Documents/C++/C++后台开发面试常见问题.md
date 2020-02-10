@@ -73,9 +73,15 @@ C-style casts also ignore access control when performing a static_cast, which me
 ## Effective C++
 
 Item 2: Prefer consts, enums, and inlines to #defines.  
-Item 3: Use const whenever possible.
-Item 4: Make sure that objects are initialized before they're used.
-Item 5: Know what functions C++ sliently writes ans calls.
+Item 3: Use const whenever possible.  
+Item 4: Make sure that objects are initialized before they're used.  
+Item 5: Know what functions C++ sliently writes ans calls.  
+Item 7: Declare destructions virtual in polymorphic base classes.  
+Item 8: Prevent exceptions from leaving destructors.  
+Item 9: Never call virtual funcitons during construction or destruction. (virtual functions never go down into derived classes.)
+
+
+
 
 
 
