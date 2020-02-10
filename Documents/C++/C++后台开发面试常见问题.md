@@ -60,6 +60,17 @@ C-style casts also ignore access control when performing a static_cast, which me
 [read more](https://en.cppreference.com/w/cpp/language/explicit)
 
 
+### Polymorphisms
+These polymorphisms also go by diferent names in C++,
+* Subtype polymorphisms is also known as **runtime polymorphisms**.
+* Parametric polymorphisms is also known as **compile-time polymorphisms**.
+* Ad-hoc polymorphisms is also known as **overlaoding**.
+* Coercion is also known as (implict or explicit) **casting**.  
+[Read more The Four Polymorphisms in C++](https://catonmat.net/cpp-polymorphism)
+
+
+
+
 ### Reference
 
 #### What is move semantics?
@@ -70,6 +81,7 @@ C-style casts also ignore access control when performing a static_cast, which me
 [Read more](https://en.wikipedia.org/wiki/C%2B%2B11#Rvalue_references_and_move_constructors)
 
 
+
 ## Effective C++
 
 Item 2: Prefer consts, enums, and inlines to #defines.  
@@ -78,7 +90,19 @@ Item 4: Make sure that objects are initialized before they're used.
 Item 5: Know what functions C++ sliently writes ans calls.  
 Item 7: Declare destructions virtual in polymorphic base classes.  
 Item 8: Prevent exceptions from leaving destructors.  
-Item 9: Never call virtual funcitons during construction or destruction. (virtual functions never go down into derived classes.)
+Item 9: Never call virtual funcitons during construction or destruction. (virtual functions never go down into derived classes.)  
+Item10: Have assignment operators return a reference to *this.  
+Item11: Handle assignment to self in operator=.  
+Item12: Copy all parts of an object.
+
+
+
+
+
+
+
+
+
 
 
 
