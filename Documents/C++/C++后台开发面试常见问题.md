@@ -64,6 +64,10 @@ C-style casts also ignore access control when performing a static_cast, which me
 
 #### What is move semantics?
 
+> This referes to temporaries that are permitted to be modified after they are initialized, for the purpose of allowing "move sematics".
+
+> rvalue references allow developers to provide perfect function forwarding.  
+[Read more](https://en.wikipedia.org/wiki/C%2B%2B11#Rvalue_references_and_move_constructors)
 
 
 
