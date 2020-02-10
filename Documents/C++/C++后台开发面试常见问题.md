@@ -70,5 +70,15 @@ C-style casts also ignore access control when performing a static_cast, which me
 [Read more](https://en.wikipedia.org/wiki/C%2B%2B11#Rvalue_references_and_move_constructors)
 
 
+## Effective C++
+
+Item 2: Prefer consts, enums, and inlines to #defines.  
+Item 3: Use const whenever possible.
+Item 4: Make sure that objects are initialized before they're used.
+Item 5: Know what functions C++ sliently writes ans calls.
+
+
+
+
 
 
