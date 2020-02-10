@@ -1,3 +1,6 @@
+
+
+
 ##  C/C++
 
 ### const
@@ -50,5 +53,18 @@
 C-style casts also ignore access control when performing a static_cast, which means that they have the ability to perform an operation that no other cast can.
 
 [Read more:](https://stackoverflow.com/questions/332030/when-should-static-cast-dynamic-cast-const-cast-and-reinterpret-cast-be-used)
+
+### explicit specifier
+1. Specifies that a constructor or conversion function (since C++11) or deduction guide (since C++17) is explicit, that is, it cannot be used for implicit conversions and copy-initialization.
+2) The explicit specifier may be used with a constant expression. The function is explicit if and only if that constant expression evaluates to true.
+[read more](https://en.cppreference.com/w/cpp/language/explicit)
+
+
+### Reference
+
+#### What is move semantics?
+
+
+
 
 
