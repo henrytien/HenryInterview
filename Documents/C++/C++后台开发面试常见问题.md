@@ -89,6 +89,16 @@ These polymorphisms also go by diferent names in C++,
 [Read more](https://en.wikipedia.org/wiki/C%2B%2B11#Rvalue_references_and_move_constructors)
 
 
+### Can we store unordered_map<T>::iterator?
+> (To put this in context: §23.2.5 is the section on unordered associative containers, so it applies to std::unordered_set, std::unordered_map, std::unordered_multiset and std::unordered_multimap.) This means:
+
+>1. If you want to insert n elements into an unordered_map called hash, you can check whether
+`hash.size() + n < hash.max_load_factor() * hash.bucket_count()`
+is true. If it is false, all iterators will be invalidated during the insert. If true, iterators will remain valid.
+
+2. Even if iterators are invalidated in this operation, references to the elements themselves will remain valid.
+
+3. If you erase elements, only iterators pointing to those will be invalidated; other iterators will remain valid.
 
 ## Effective C++
 
