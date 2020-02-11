@@ -60,6 +60,14 @@ C-style casts also ignore access control when performing a static_cast, which me
 [read more](https://en.cppreference.com/w/cpp/language/explicit)
 
 
+### noncopyable
+> If you inherit from noncopyable then it has two benefits:
+
+* It prevents the class from being copied or assigned
+* It makes the intention clear from looking at the class definition, ie self-documenting code  
+[What are use cases for booster::noncopyable?
+](https://stackoverflow.com/questions/3518853/what-are-use-cases-for-boosternoncopyable)
+
 ### Polymorphisms
 These polymorphisms also go by diferent names in C++,
 * Subtype polymorphisms is also known as **runtime polymorphisms**.
