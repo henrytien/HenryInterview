@@ -22,6 +22,15 @@
 4. 修饰成员函数，修饰成员函数使得不需要生成对象就可以访问该函数，但是在 static 函数内不能访问非静态成员。
 
 
+### Memory of layout of a c/c++ pramgram
+![](./Images/memory_layout.jpg)
+* **Stack**:  The compiler automatically allocates and release, stores the parameter value of the function, local variable, function calls. The operation is similar to the stack in the data structure.
+
+* **Heap**: Heap is a segment where dynamic memory allocation usually take place, it is usually released by the programmer, if the programmer doesn't release, it may be relaesed by the OS when the program exits.
+
+* **Uninitialized data segment(BSS)**: Store global and static variables that are arithmetic 0 -- initialized by the kernel or uninitailized.   
+e.g. `static int i;`
+
 ### Difference Between Malloc and New
 
 > The basic differences between the two is that malloc exits in the C-language while new is a specific feauture of the C++ language. Malloc is also a function(which, for programmers, requires some time to execute) while new is an operator program (which cuts the execution time). This is a benefit from the operator new because programmers doing real-time programming have a need to choose the fastest method to use.
@@ -86,19 +95,17 @@ These polymorphisms also go by diferent names in C++,
 > This referes to temporaries that are permitted to be modified after they are initialized, for the purpose of allowing "move sematics".
 
 > rvalue references allow developers to provide perfect function forwarding.  
-[Read more](https://en.wikipedia.org/wiki/C%2B%2B11#Rvalue_references_and_move_constructors)
+[Read more](https://en.wikipedia.org/wiki/C%2B%2B11#Rvalue_references_and_move_constructors)  
+[What is move semantics?](https://stackoverflow.com/questions/3106110/what-is-move-semantics)
 
 
 ### Can we store unordered_map<T>::iterator?
 > (To put this in context: §23.2.5 is the section on unordered associative containers, so it applies to std::unordered_set, std::unordered_map, std::unordered_multiset and std::unordered_multimap.) This means:
-
 >1. If you want to insert n elements into an unordered_map called hash, you can check whether
 `hash.size() + n < hash.max_load_factor() * hash.bucket_count()`
 is true. If it is false, all iterators will be invalidated during the insert. If true, iterators will remain valid.
-
-2. Even if iterators are invalidated in this operation, references to the elements themselves will remain valid.
-
-3. If you erase elements, only iterators pointing to those will be invalidated; other iterators will remain valid.
+>2. Even if iterators are invalidated in this operation, references to the elements themselves will remain valid.
+>3. If you erase elements, only iterators pointing to those will be invalidated; other iterators will remain valid.
 
 ## Effective C++
 
@@ -112,6 +119,7 @@ Item 9: Never call virtual funcitons during construction or destruction. (virtua
 Item10: Have assignment operators return a reference to *this.  
 Item11: Handle assignment to self in operator=.  
 Item12: Copy all parts of an object.
+
 
 
 
