@@ -31,6 +31,8 @@
 * **Uninitialized data segment(BSS)**: Store global and static variables that are arithmetic 0 -- initialized by the kernel or uninitailized.   
 e.g. `static int i;`
 
+* **Initialized data segment(Data)**: 
+
 ### Difference Between Malloc and New
 
 > The basic differences between the two is that malloc exits in the C-language while new is a specific feauture of the C++ language. Malloc is also a function(which, for programmers, requires some time to execute) while new is an operator program (which cuts the execution time). This is a benefit from the operator new because programmers doing real-time programming have a need to choose the fastest method to use.
@@ -85,7 +87,9 @@ These polymorphisms also go by diferent names in C++,
 * Coercion is also known as (implict or explicit) **casting**.  
 [Read more The Four Polymorphisms in C++](https://catonmat.net/cpp-polymorphism)
 
-
+### C++ map having key as a user define data type
+> C++ map stores keys in ordered form (Note that it internally use a self balancing binary search tree). Ordering is internally done using operator ” < " So if we use our own data type as key, we must overload this operator for our data type.
+[read more](https://www.geeksforgeeks.org/c-map-key-user-define-data-type/)
 
 
 ### Reference
