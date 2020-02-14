@@ -111,6 +111,11 @@ is true. If it is false, all iterators will be invalidated during the insert. If
 >2. Even if iterators are invalidated in this operation, references to the elements themselves will remain valid.
 >3. If you erase elements, only iterators pointing to those will be invalidated; other iterators will remain valid.
 
+
+## The Standard Template Library
+Three categories: Sequence containers, Associative container, and Container apdaters.
+* **Sequence Containers** are container classes that maintain the ordering of elements of containers. In C++11 there are 6 sequnce containers: std::vector, std::deque, std::array, std::list, std::forward_list and std::basic_string.
+
 ## Effective C++
 
 Item 2: Prefer consts, enums, and inlines to #defines.  
