@@ -124,9 +124,12 @@ OK
 > lpop list-key
 "item"
 
-> lrange list-key 0 -1
-1) "item2"
-2) "item"
+127.0.0.1:6379> lrange "redis data type" 0 -1
+1) "zset"
+2) "hash"
+3) "set"
+4) "list"
+5) "string"
 ```
 
 ## SET
@@ -199,31 +202,63 @@ OK
 <div align="center"> <img src="https://cs-notes-1256109796.cos.ap-guangzhou.myqcloud.com/1202b2d6-9469-4251-bd47-ca6034fb6116.png" width="400"/> </div><br>
 
 ```html
-> zadd zset-key 728 member1
+127.0.0.1:6379> zadd zset-mj 728 member1
 (integer) 1
-> zadd zset-key 982 member0
+127.0.0.1:6379> zadd zset-mj 200 member2
 (integer) 1
-> zadd zset-key 982 member0
+127.0.0.1:6379> zadd zset-mj 300 member3
+(integer) 1
+127.0.0.1:6379> zrange zset-mj 0 -1 withscores
+1) "member2"
+2) "200"
+3) "member3"
+4) "300"
+5) "member1"
+6) "728"
+
+127.0.0.1:6379> zrangebyscore zset-mj 0 800 withscores
+1) "member2"
+2) "200"
+3) "member3"
+4) "300"
+5) "member1"
+6) "728"
+
+127.0.0.1:6379> zrem zset-mj member1
+(integer) 1
+127.0.0.1:6379> zrange zset-mj 0 -1 withscores
+1) "member2"
+2) "200"
+3) "member3"
+4) "300"
+
+
+127.0.0.1:6379> zadd scoredboard 999 "anorak"
+(integer) 1
+127.0.0.1:6379> zcard scoreboard
 (integer) 0
-
-> zrange zset-key 0 -1 withscores
-1) "member1"
-2) "728"
-3) "member0"
-4) "982"
-
-> zrangebyscore zset-key 0 800 withscores
-1) "member1"
-2) "728"
-
-> zrem zset-key member1
+127.0.0.1:6379> zcard scoredboard
 (integer) 1
-> zrem zset-key member1
+127.0.0.1:6379> zadd scoreboard 99 "daito" 99 "shoto" 199 "aech" 299 "art3mis" 399 "parzival"
+(integer) 5
+127.0.0.1:6379> zadd scoreboard 99 "daito" 99 "shoto" 199 "aech" 299 "art3mis" 399 "parzival"
 (integer) 0
+127.0.0.1:6379> zscore scoreboard parzival
+"399"
+127.0.0.1:6379> zscore scoreboard parzival
+"399"
+127.0.0.1:6379> zrank scoreboard shoto
+(integer) 1
+127.0.0.1:6379> zrevrank scoreboard anorak
+(nil)
+127.0.0.1:6379> zrevrank scoreboard shoto
+(integer) 3
+127.0.0.1:6379> zincrby scoreboard 100 parzival
+"499"
+127.0.0.1:6379>
 
-> zrange zset-key 0 -1 withscores
-1) "member0"
-2) "982"
+127.0.0.1:6379> zrangebyscore scoreboard 499 +inf
+1) "parzival"
 ```
 
 # 三、数据结构
