@@ -145,6 +145,36 @@ void memcpy(void* dest, void* src, int size)
 }
 ```
 
+## How do you solve a collision hash?
+
+**Collision Handing**: Since a hash function gets us a small number of a big key, there is a possibility that two keys result in same value. The situation where a newly inserted key maps to an already occupied slot in hash table is called collision and must be handled using some collision handing techniques. 
+
+- **Chaining**: The idea is to make to each cell of hash table point to a linked list of records that have same hash function value. Chaining is simple, but requires additional memory outside the table.
+
+  <img src="https://media.geeksforgeeks.org/wp-content/cdn-uploads/gq/2015/07/hashChaining1.png" alt="hashChaining" style="zoom:75%;" />
+
+  **Advantages**:
+
+  1. Simple to implement.
+  2. Hash table never fills up, we can add more elements to the chain.
+  3. Less sensitive the hash function or load functors.
+  4. It is mostly used when it is unknown how man and how frequently keys may be inserted or deleted.
+
+  **Disadvantages**:
+
+  1. Cache performance of chaining is not good as keys are sorted using a linked list. Open addressing provides better cash performance as everything is sorted in the same table.
+  2. Wastage of space(Some parts of hash table never used)
+  3. if the chain becomes long, the search time can become O(n) in the worst case.
+  4. Uses extra space for links.
+
+  References:
+
+  [Hashing I: Chaining, Hash Functions](http://courses.csail.mit.edu/6.006/fall09/lecture_notes/lecture05.pdf )
+
+- **Open Addressing**: In open addressing, all elements are sorted in hash table itself. Each table entry contains either a record or NIL. when searching for an element, we one by one examine table slots util the desire element is found or it is clear that the element is not in the table. 
+
+  
+
 ## Effective C++
 
 Item 2: Prefer consts, enums, and inlines to #defines.  
