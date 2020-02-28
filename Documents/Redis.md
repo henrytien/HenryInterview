@@ -383,7 +383,12 @@ int dictRehash(dict *d, int n) {
 
 - 插入速度非常快速，因为不需要进行旋转等操作来维护平衡性；
 - 更容易实现；
-- 支持无锁操作。
+- 支持无锁操作
+- 保证INSERT和REMOVE操作是O(logn)，而通用链表的复杂度为O(n)。
+
+> ZAdd/ZRem是O(log(N))，ZRangeByScore/ZRemRangeByScore是O(log(N)+M)，N是Set大小，M是结果/操作元素的个数。
+
+> ZSET的实现用到了两个数据结构：hash table 和 skip list(跳跃表)，其中hash table是具体使用redis中的dict来实现的，主要是为了保证查询效率为O(1) ，而skip list(跳跃表)主要是保证元素有序并能够保证INSERT和REMOVE操作是O(logn)的复杂度。
 
 # 四、使用场景
 
