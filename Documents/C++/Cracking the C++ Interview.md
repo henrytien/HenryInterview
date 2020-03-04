@@ -3,25 +3,6 @@
 
 ##  C/C++
 
-### const
-
-#### 作用
-
-1. 修饰变量，说明该变量不可以被改变；
-2. 修饰指针，分为指向常量的指针和指针常量；
-3. 常量引用，经常用于形参类型，即避免了拷贝，又避免了函数对值的修改；
-4. 修饰成员函数，说明该成员函数内不能修改成员变量。
-
-
-### static
-
-#### 作用
-1. 修饰普通变量，修改变量的存储区域和生命周期，使变量存储在静态区，在 main 函数运行前就分配了空间，如果有初始值就用初始值初始化它，如果没有初始值系统用默认值初始化它。
-2. 修饰普通函数，表明函数的作用范围，仅在定义该函数的文件内才能使用。在多人开发项目时，为了防止与他人命名空间里的函数重名，可以将函数定位为 static。
-3. 修饰成员变量，修饰成员变量使所有的对象只保存一个该变量，而且不需要生成对象就可以访问该成员。
-4. 修饰成员函数，修饰成员函数使得不需要生成对象就可以访问该函数，但是在 static 函数内不能访问非静态成员。
-
-
 ### Memory of layout of a c/c++ pramgram
 ![](./Images/memory_layout.jpg)
 * **Stack**:  The compiler automatically allocates and release, stores the parameter value of the function, local variable, function calls. The operation is similar to the stack in the data structure.
@@ -88,7 +69,7 @@ These polymorphisms also go by diferent names in C++,
 [Read more The Four Polymorphisms in C++](https://catonmat.net/cpp-polymorphism)
 
 ### C++ map having key as a user define data type
-> C++ map stores keys in ordered form (Note that it internally use a self balancing binary search tree). Ordering is internally done using operator ” < " So if we use our own data type as key, we must overload this operator for our data type.
+> C++ map stores keys in ordered form (Note that it internally use a self balancing binary search tree). Ordering is internally done using operator " < " So if we use our own data type as key, we must overload this operator for our data type.
 [read more](https://www.geeksforgeeks.org/c-map-key-user-define-data-type/)
 
 
