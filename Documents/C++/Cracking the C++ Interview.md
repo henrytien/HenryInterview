@@ -12,7 +12,27 @@
 * **Uninitialized data segment(BSS)**: Store global and static variables that are arithmetic 0 -- initialized by the kernel or uninitailized.   
 e.g. `static int i;`
 
-* **Initialized data segment(Data)**: 
+* **Initialized data segment(Data)**: usually called the Data Segment. A data segment is a portion of virtual address space of a program, which contains the **global**, **static**, **literal**, **external variables** that are initialized by programmer.
+* **Text**: also know as a code segment or simply as text, is one of the sections of a program in an object file or in memory, which contains **executable instructions**. It is typically read-only.
+  
+```c
+#include<stdio.h>
+int a = 0;  //Initialized data segment 
+char *p1;   //Uninitailized data segment, Zero initialized, nullptr
+void main(){
+    int b; //stack, undefined behavior, may be initialized to anything
+    char s[] = "mj";   // stack
+    char *p2;   // stack, can point to any address
+    char *p3 = "mj520"; //mj520/0: Initialized data segment, p3 stack
+    static int c  = 0;  // Initialized data segment
+    p1 = (char *)malloc(10);    //10 bytes: Heap
+    p2 = (char *)malloc(20);    //20 bytes: Heap
+    strcpy(p1,"mjIloveu");      //mjIloveu/0 Initialized data segment, complier may optimize it to store it at the same location where p3 points to.
+
+}
+
+```
+
 
 ### Difference Between Malloc and New
 
