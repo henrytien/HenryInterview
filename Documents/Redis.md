@@ -149,3 +149,38 @@ string类型是二进制安全的，redis的string可以包含任何数据，如
 1. String通常用于保存单个字符串或JSON字符串数据 
 2. String是二进制安全的，所以可以把保密要求高的图片文件内容作为字符串来存储 
 3. 计数器：常规Key-Value缓存应用，如微博数、粉丝数。INCR本身就具有原子性特性，所以不会有线程安全问题
+
+## Hashes
+
+Hashes, which are maps composed of fields associated with values. Both the field and the value are strings. This is very similar to Ruby or Python hashes.
+
+### Hash commands
+
+#### HGETALL key
+
+Returns all fields and values of the hash stored at `key`. In the returned value, every field name is followed by its value, so the length of the reply is twice the size of the hash.                  
+
+#### HSETNX key field value
+
+Sets `field` in the hash stored at `key` to `value`, only if `field` does not yet exist. If `key` does not exist, a new key holding a hash is created. If `field` already exists, this operation has no effect.
+
+#### HVALS key
+
+> **Time complexity:** O(N) where N is the size of the hash.
+
+Returns all values in the hash stored at `key`.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
