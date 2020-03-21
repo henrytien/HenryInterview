@@ -170,13 +170,36 @@ Sets `field` in the hash stored at `key` to `value`, only if `field` does not ye
 
 Returns all values in the hash stored at `key`.
 
+## List
 
+### List commands
 
+#### LPUSH key element [element ...]
 
+Insert all the specified values at the head of the list stored at `key`. If `key` does not exist, it is created as empty list before performing the push operations. When `key` holds a value that is not a list, an error is returned.
 
+It is possible to push multiple elements using a single command call just specifying multiple arguments at the end of the command. Elements are inserted one after the other to the head of the list, from the leftmost element to the rightmost element. So for instance the command `LPUSH mylist a b c` will result into a list containing `c` as first element, `b` as second element and `a` as third element.
 
+```sql
+127.0.0.1:6379> lpush mj1 "I love you"
+(integer) 1
+127.0.0.1:6379> lpop mj1
+"I love you"
+```
 
+#### LRANGE key start stop
 
+Returns the specified elements of the list stored at `key`. The offsets `start` and `stop` are zero-based indexes, with `0` being the first element of the list (the head of the list), `1` being the next element and so on.
+
+These offsets can also be negative numbers indicating offsets starting at the end of the list. For example, `-1` is the last element of the list, `-2` the penultimate, and so on.
+
+```sql
+127.0.0.1:6379> rpush mj1 "I love you forver"
+(integer) 1
+127.0.0.1:6379> lrange mj1 0 -1
+1) "I love you forver"
+127.0.0.1:6379>
+```
 
 
 
