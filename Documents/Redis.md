@@ -1,5 +1,9 @@
 # Redis
 
+##  Documentation
+
+[Documentation](https://redis.io/documentation) 
+
 [TOC]
 
 ## Redis简介
@@ -198,12 +202,58 @@ These offsets can also be negative numbers indicating offsets starting at the en
 (integer) 1
 127.0.0.1:6379> lrange mj1 0 -1
 1) "I love you forver"
-127.0.0.1:6379>
+127.0.0.1:6379> lrange mj1 0 -1
+1) "I love you forver"
+127.0.0.1:6379> lrange mj1 0 -1
+1) "I love you forver"
+127.0.0.1:6379> lindex mj1 0
+"I love you forver"
 ```
 
+#### BLPOP key [key ...] timeout
 
+[BLPOP](https://redis.io/commands/blpop) is a blocking list pop primitive. It is the blocking version of [LPOP](https://redis.io/commands/lpop) because it blocks the connection when there are no elements to pop from any of the given lists. An element is popped from the head of the first list that is non-empty, with the given keys being checked in the order that they are given.
 
+```sql
+blpop l1 200
+1) "l1"
+2) "3"
+(11.28s)
 
+lpush l1 3
+(integer) 1
+```
 
+#### LTRIM key start stop
 
+```
+LPUSH mylist someelement
+LTRIM mylist 0 99
+```
+
+This pair of commands will push a new element on the list, while making sure that the list will not grow larger than 100 elements. **This is very useful when using Redis to store logs** for example. It is important to note that when used in this way [LTRIM](https://redis.io/commands/ltrim) is an O(1) operation because in the average case just one element is removed from the tail of the list.
+
+```sql
+127.0.0.1:6379> RPUSH mylist "one"
+(integer) 2
+127.0.0.1:6379> rpush mylist "two"
+(integer) 3
+127.0.0.1:6379> RPUSH mylist "three"
+(integer) 4
+127.0.0.1:6379> LTRIM mylist 1 -1
+OK
+127.0.0.1:6379> LRANGE mylist 0 -1
+1) "one"
+2) "two"
+3) "three"
+127.0.0.1:6379> LRANGE mylist 0 -1
+1) "one"
+2) "two"
+3) "three"
+127.0.0.1:6379> LTRIM mylist 1 -1
+OK
+127.0.0.1:6379> LRANGE mylist 0 -1
+1) "two"
+2) "three"
+```
 
