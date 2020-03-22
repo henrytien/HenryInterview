@@ -257,3 +257,23 @@ OK
 2) "three"
 ```
 
+#### LSET key index element
+
+Sets the list element at `index` to `element`. For more information on the `index` argument, see [LINDEX](https://redis.io/commands/lindex).
+
+An error is returned for out of range indexes.
+
+```sql
+127.0.0.1:6379> RPUSH mylist "one"
+(integer) 3
+127.0.0.1:6379> RPUSH mylist "two"
+(integer) 4
+127.0.0.1:6379> lset mylist -2 "five"
+OK
+127.0.0.1:6379> lrange mylist 0 -1
+1) "two"
+2) "three"
+3) "five"
+4) "two"
+```
+
