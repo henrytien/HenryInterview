@@ -277,3 +277,73 @@ OK
 4) "two"
 ```
 
+#### LINSERT key BEFORE|AFTER pivot element
+
+Inserts `element` in the list stored at `key` either before or after the reference value `pivot`.
+
+When `key` does not exist, it is considered an empty list and no operation is performed.
+
+An error is returned when `key` exists but does not hold a list value.
+
+```sql
+linsert mylist BEFORE "two" "six"
+(integer) 5
+127.0.0.1:6379> lrange mylist 0 -1
+1) "six"
+2) "two"
+3) "three"
+4) "five"
+5) "two"
+```
+
+#### RPOPLPUSH source destination
+
+Atomically returns and removes the last element (tail) of the list stored at `source`, and pushes the element at the first element (head) of the list stored at `destination`.
+
+For example: consider `source` holding the list `a,b,c`, and `destination` holding the list `x,y,z`. Executing [RPOPLPUSH](https://redis.io/commands/rpoplpush) results in `source` holding `a,b` and `destination` holding `c,x,y,z`.
+
+If `source` does not exist, the value `nil` is returned and no operation is performed. If `source` and `destination` are the same, the operation is equivalent to removing the last element from the list and pushing it as first element of the list, so it can be considered as a list rotation command.
+
+#####  Pattern: Reliable queue
+
+Redis is often used as a messaging server to implement processing of background jobs or other kinds of messaging tasks. A simple form of queue is often obtained pushing values into a list in the producer side, and waiting for this values in the consumer side using [RPOP](https://redis.io/commands/rpop) (using polling), or [BRPOP](https://redis.io/commands/brpop) if the client is better served by a blocking operation.
+
+#####  Pattern: Circular list
+
+Using [RPOPLPUSH](https://redis.io/commands/rpoplpush) with the same source and destination key, a client can visit all the elements of an N-elements list, one after the other, in O(N) without transferring the full list from the server to the client using a single [LRANGE](https://redis.io/commands/lrange) operation.
+
+The above pattern works even if the following two conditions:
+
+- There are multiple clients rotating the list: they'll fetch different elements, until all the elements of the list are visited, and the process restarts.
+
+- Even if other clients are actively pushing new items at the end of the list. 
+
+  An example is a monitoring system that must check that a set of web sites are reachable, with the smallest delay possible, using a number of parallel workers.
+
+```sql
+127.0.0.1:6379> RPUSH mylist "one"
+(integer) 6
+127.0.0.1:6379> RPUSH mylist "two"
+(integer) 7
+127.0.0.1:6379> RPUSH mylist "three"
+(integer) 8
+127.0.0.1:6379> RPOPLPUSH mylist myotherlist
+"three"
+127.0.0.1:6379> LRANGE mylist 0 -1
+1) "six"
+2) "two"
+3) "three"
+4) "five"
+5) "two"
+6) "one"
+7) "two"
+127.0.0.1:6379> lrange myotherlist 0 -1
+1) "three"
+127.0.0.1:6379>
+```
+
+## Set 
+
+
+
+#### ZADD key [NX|XX] [CH] [INCR] score member [score member ...]
