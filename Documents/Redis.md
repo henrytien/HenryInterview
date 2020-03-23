@@ -443,3 +443,39 @@ However while blocking commands like [SMEMBERS](https://redis.io/commands/smembe
    4) "mj520"
 ```
 
+#  [Redis debugging guide](https://redis.io/topics/debugging#attaching-gdb-to-a-running-process)
+
+## Attaching GDB to a running process
+
+```
+$ redis-cli info | grep process_id
+process_id:58414
+```
+
+In the above example the process ID is **58414**.
+
+- Login into your Redis server.
+
+- (Optional but recommended) Start **screen** or **tmux** or any other program that will make sure that your GDB session will not be closed if your ssh connection will timeout. If you don't know what screen is do yourself a favor and [Read this article](http://www.linuxjournal.com/article/6340)
+
+- Attach GDB to the running Redis server typing:
+
+  gdb `` ``
+
+  For example: gdb /usr/local/bin/redis-server 58414
+
+GDB will start and will attach to the running server printing something like the following:
+
+## Obtaining the core file
+
+The next step is to generate the core dump, that is the image of the memory of the running Redis process. This is performed using the `gcore` command:
+
+```
+(gdb) gcore
+Saved corefile core.58414
+```
+
+
+
+## [VSCode, MacOS Catalina - doesn't stop on breakpoints on C/C++ debug](https://stackoverflow.com/questions/58329611/vscode-macos-catalina-doesnt-stop-on-breakpoints-on-c-c-debug)
+
