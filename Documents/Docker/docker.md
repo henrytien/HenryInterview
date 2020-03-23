@@ -208,6 +208,24 @@ $ docker run --expose 80 ubuntu bash
 
 This exposes port `80` of the container without publishing the port to the host system’s interfaces.
 
+# docker save
+
+## Description
+
+Save one or more images to a tar archive (streamed to STDOUT by default)
+
+## Usage
+
+```
+docker save [OPTIONS] IMAGE [IMAGE...]
+```
+
+```
+docker save busybox > busybox.tar
+ls -sh busybox.tar
+2832 busybox.tar
+```
+
 
 
 # File system sharing (osxfs)
