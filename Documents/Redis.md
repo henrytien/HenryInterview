@@ -1,6 +1,4 @@
-# Redis
-
-##  Documentation
+## Redis
 
 [Documentation](https://redis.io/documentation) 
 
@@ -369,7 +367,7 @@ set
 (error) WRONGTYPE Operation against a key holding the wrong kind of value
 ```
 
-
+#### SISMEMBER key member
 
 ```
 sismember myset "one"
@@ -380,6 +378,68 @@ sismember myset "one"
 (integer) 1
 ```
 
-#### SISMEMBER key member
+#### SRANDMEMBER key [count]
 
-#### ZADD key [NX|XX] [CH] [INCR] score member [score member ...]
+```
+127.0.0.1:6379> srandmember myset 2
+1) "Hello"
+2) "one"
+127.0.0.1:6379>
+```
+
+#####  Distribution of returned elements
+
+The distribution of the returned elements is far from perfect when the number of elements in the set is small, this is due to the fact that we used an approximated random element function that does not really guarantees good distribution.
+
+The algorithm used, that is implemented inside dict.c, samples the hash table buckets to find a non-empty one. **Once a non empty bucket is found, since we use chaining in our hash table implementation, the number of elements inside the bucket is checked and a random element is selected.**
+
+This means that if you have two non-empty buckets in the entire hash table, and one has three elements while one has just one, the element that is alone in its bucket will be returned with much higher probability.
+
+#### SREM key member [member ...]
+
+```shell
+127.0.0.1:6379> SMEMBERS myset
+1) "Hello"
+2) "World"
+3) "two"
+4) "one"
+5) "three"
+127.0.0.1:6379> SREM myset one
+(integer) 1
+127.0.0.1:6379> SMEMBERS myset
+1) "Hello"
+2) "World"
+3) "two"
+4) "three"
+```
+
+#### SCAN cursor [MATCH pattern] [COUNT count] [TYPE type]	
+
+Since these commands allow for incremental iteration, returning only a small number of elements per call, they can be used in production without the downside of commands like [KEYS](https://redis.io/commands/keys) or [SMEMBERS](https://redis.io/commands/smembers) that may block the server for a long time (even several seconds) when called against big collections of keys or elements.
+
+However while blocking commands like [SMEMBERS](https://redis.io/commands/smembers) are able to provide all the elements that are part of a Set in a given moment, The SCAN family of commands only offer limited guarantees about the returned elements since the collection that we incrementally iterate can change during the iteration process.
+
+```shell
+127.0.0.1:6379> sadd myset 1 2 3 foo foobar feelsgood
+(integer) 6
+127.0.0.1:6379> sscan myset 0 match f*
+1) "0"
+2) 1) "foobar"
+   2) "foo"
+   3) "feelsgood"
+127.0.0.1:6379> scan 0 MATCH *mj*
+1) "9"
+2) 1) "mj1"
+   2) "list_mj"
+   3) "mj"
+   4) "mj520"
+   5) "zset-mj"
+   
+127.0.0.1:6379> scan 0 MATCH *mj* count 4
+1) "10"
+2) 1) "mj1"
+   2) "list_mj"
+   3) "mj"
+   4) "mj520"
+```
+
