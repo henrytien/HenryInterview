@@ -344,6 +344,42 @@ The above pattern works even if the following two conditions:
 
 ## Set 
 
+#### SET key value [EX seconds|PX milliseconds] [NX|XX] [KEEPTTL]
 
+```shell
+127.0.0.1:6379> SET mykey "Hello"
+OK
+127.0.0.1:6379> get mykey
+"Hello"
+127.0.0.1:6379>  SET anotherkey "will expire in a minute" EX 60
+OK
+127.0.0.1:6379> keys *
+```
+
+#### SCARD key
+
+Returns the set cardinality (number of elements) of the set stored at `key`.
+
+```
+127.0.0.1:6379> type myset
+set
+127.0.0.1:6379> scard myset
+(integer) 2
+127.0.0.1:6379> scard mj
+(error) WRONGTYPE Operation against a key holding the wrong kind of value
+```
+
+
+
+```
+sismember myset "one"
+(integer) 1
+127.0.0.1:6379> sismember myset "two"
+(integer) 0
+127.0.0.1:6379> SISMEMBER myset "one"
+(integer) 1
+```
+
+#### SISMEMBER key member
 
 #### ZADD key [NX|XX] [CH] [INCR] score member [score member ...]
