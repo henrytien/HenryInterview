@@ -1,8 +1,6 @@
-## Redis
+# Redis
 
 [Documentation](https://redis.io/documentation) 
-
-[TOC]
 
 # What is Redis?
 
@@ -135,11 +133,7 @@
 
 ## String 
 
-### String特点：
-
-string类型是二进制安全的，redis的string可以包含任何数据，如图像、序列化对象。一个键最多能存储512MB。
-
-二进制安全是指，在传输数据的时候，能保证二进制数据的信息安全，也就是不会被篡改、破译；如果被攻击，能够及时检测出来 。
+Redis has commands for operating on some parts or the whole of the string data type. The string data type can also store integers and floating point numbers. Here is the [link](https://redis.io/commands#string) for the documentation on the commands used for operating on strings. We have previously seen an example of how to use the string data type.
 
 ### String 的常见命令
 
