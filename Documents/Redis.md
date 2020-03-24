@@ -491,7 +491,7 @@ redis-server的main函数位于server.c 中，我们从main开始逐步分析代
 
 <img src="./Images/debug_main.png" style="zoom:50%;" />
 
-## InitConfig
+## Config
 
 ### struct redisServer
 
@@ -595,13 +595,89 @@ Our thread-safe contexts GIL must start with already locked, it is just unlocked
 
 ## Check
 
+### Sentinel mode
+
+Parsing the configuration file, in sentinel mode will have the effect of populating the sentinel data structures with master nodes to monitor.
+
+```c
+if (server.sentinel_mode) {
+  initSentinelConfig();
+  initSentinel();
+}
+```
+
+
+
 ### Check redis-check-rdb/aof mode
 
-## initServer
+```c
+if (strstr(argv[0],"redis-check-rdb") != NULL)
+  	redis_check_rdb_main(argc,argv,NULL);
+else if (strstr(argv[0],"redis-check-aof") != NULL)
+    redis_check_aof_main(argc,argv);
+```
+
+
+
+### Handle config file
+
+All the other options are parsed and conceptually appended to the configuration file.
+
+```c
+ while(j != argc) {
+   if (argv[j][0] == '-' && argv[j][1] == '-') {
+     /* Option name */
+     if (!strcmp(argv[j], "--check-rdb")) {
+       /* Argument has no options, need to skip for parsing. */
+       j++;
+       continue;
+     }
+     if (sdslen(options)) options = sdscat(options,"\n");
+     options = sdscat(options,argv[j]+2);
+     options = sdscat(options," ");
+   } else {
+     /* Option argument */
+     options = sdscatrepr(options,argv[j],strlen(argv[j]));
+     options = sdscat(options," ");
+   }
+   j++;
+ }
+```
+
+
+
+[loadServerConfigFromString](https://github.com/henrytien/redis/blob/unstable/src/config.c#L289)
+
+Load the server configuration from the specified filename. This way loadServerConfig can be used to just load  a string.
+
+```c
+//...
+/* Execute config directives */
+if (!strcasecmp(argv[0],"bind") && argc >= 2) {
+	int j, addresses = argc-1;
+
+	if (addresses > CONFIG_BINDADDR_MAX) {
+	err = "Too many bind addresses specified"; goto loaderr;
+}
+/* Free old bind addresses */
+for (j = 0; j < server.bindaddr_count; j++) {
+	zfree(server.bindaddr[j]);
+}
+for (j = 0; j < addresses; j++)
+	server.bindaddr[j] = zstrdup(argv[j+1]);
+	server.bindaddr_count = addresses;
+}// ...
+```
+
+---
+
+## InitServer
 
 [initServer](https://github.com/henrytien/redis/blob/unstable/src/server.c#L2684), Initialization after setting defaults from the config system. Open the TCP listening socket for the user commands.
 
-[createSharedObjects](https://github.com/henrytien/redis/blob/unstable/src/server.c#L2157) Server initializatio
+### Create aeEventLoop
+
+[createSharedObjects](https://github.com/henrytien/redis/blob/unstable/src/server.c#L2157) Server initialization.
 
 ```c
 typedef struct redisObject {
@@ -617,11 +693,119 @@ typedef struct redisObject {
 
 
 
+[aeEventLoop *aeCreateEventLoop(int setsize)](https://github.com/henrytien/redis/blob/unstable/src/ae.c#L66) State of an event based program, and all file event will be  registered.
+
+```c
+/* File event structure */
+typedef struct aeFileEvent {
+    int mask; /* one of AE_(READABLE|WRITABLE|BARRIER) */
+    aeFileProc *rfileProc;
+    // 写事件
+    aeFileProc *wfileProc;
+    void *clientData;
+} aeFileEvent;
+
+```
+
+aeEventLoop assignment server.el
+
+```c
+//...
+server.el = aeCreateEventLoop(server.maxclients+CONFIG_FDSET_INCR);
+    if (server.el == NULL) {
+        serverLog(LL_WARNING,
+            "Failed creating the event loop. Error message: '%s'",
+            strerror(errno));
+        exit(1);
+    }
+//...
+```
+
+struct aeEventLoop 
+
+![](./Images/aeEventLoop.png)
+
+Initionlization  aeEventLoop
+
+<img src="./Images/server_aeEventLoop.png" style="zoom:50%;" />
+
+### Server Listening 
+
+TCP listening socket for the user commands, the listening file descriptors are stored in the integer array 'fds' and their number is set in '*count'.
+
+```c
+int listenToPort(int port, int *fds, int *count) {
+    int j;
+
+  /* Force binding of 0.0.0.0 if no bind address is specified, always
+   * entering the loop if j == 0. */
+	if (server.bindaddr_count == 0) server.bindaddr[0] = NULL;
+	for (j = 0; j < server.bindaddr_count || j == 0; j++) {
+        if (server.bindaddr[j] == NULL) {
+            int unsupported = 0;
+            /* Bind * for both IPv6 and IPv4, we enter here only if
+             * server.bindaddr_count == 0. */
+            fds[*count] = anetTcp6Server(server.neterr,port,NULL,
+                server.tcp_backlog);
+            if (fds[*count] != ANET_ERR) {
+                anetNonBlock(NULL,fds[*count]);
+                (*count)++;
+            } else if (errno == EAFNOSUPPORT) {
+                unsupported++;
+                serverLog(LL_WARNING,"Not listening to IPv6: unsupported");
+            }
+         //...
+        }//...
+		}
+  //...
+}
+        
+```
+
+### Socket 
+
+[_anetTcpServer](https://github.com/henrytien/redis/blob/unstable/src/anet.c#L479) create socket, and set socket.
+
+```c
+//...
+for (p = servinfo; p != NULL; p = p->ai_next) {
+        // Create first socket.
+        if ((s = socket(p->ai_family,p->ai_socktype,p->ai_protocol)) == -1)
+            continue;
+
+        if (af == AF_INET6 && anetV6Only(err,s) == ANET_ERR) goto error;
+        if (anetSetReuseAddr(err,s) == ANET_ERR) goto error;
+        if (anetListen(err,s,p->ai_addr,p->ai_addrlen,backlog) == ANET_ERR) s = ANET_ERR;
+        goto end;
+    }
+    
+   //...
+```
 
 
 
+### Redis databases
 
+Create the Redis databases, and initialize other internal state.
 
+typedef struct [redisDb](https://github.com/henrytien/redis/blob/unstable/src/server.h#L635)
+
+```c
+/* Redis database representation. There are multiple databases identified
+ * by integers from 0 (the default database) up to the max configured
+ * database. The database number is the 'id' field in the structure. */
+typedef struct redisDb {
+    dict *dict;                 /* The keyspace for this DB */
+    dict *expires;              /* Timeout of keys with a timeout set */
+    dict *blocking_keys;        /* Keys with clients waiting for data (BLPOP)*/
+    dict *ready_keys;           /* Blocked keys that received a PUSH */
+    dict *watched_keys;         /* WATCHED keys for MULTI/EXEC CAS */
+    int id;                     /* Database ID */
+    long long avg_ttl;          /* Average TTL, just for stats */
+    unsigned long expires_cursor; /* Cursor of the active expire cycle. */
+    list *defrag_later;         /* List of key names to attempt to defrag one by one, gradually. */
+} redisDb;
+```
 
 
 
