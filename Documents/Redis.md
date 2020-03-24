@@ -4,8 +4,18 @@
 
 [TOC]
 
-## Redis简介
-Redis：开源、免费、高性能、K-V数据库、内存数据库、非关系型数据库，支持持久化、集群和事务
+# What is Redis?
+
+1. Redis is an **in-memory,** **key-value** **store**.
+
+- **In-memory store**: Redis keeps the data in the cache and it does not write to the disk. This makes reading/writing data very fast. (However, Redis has an option to write data to the disk)
+- **Key-value store**: Redis can store data as key-value pairs.
+
+2. It is a [No-SQL](https://en.wikipedia.org/wiki/NoSQL) database.
+
+3. Uses [data structures](https://redis.io/topics/data-types-intro) to store data.
+
+4. Interaction with data is command-based.
 
 > Redis is an open source (BSD licensed), in-memory data structure store, used as a database, cache and message broker. It supports data structures such as **strings, hashes, lists, sets, sorted sets** with range queries, bitmaps, hyperloglogs, geospatial indexes with radius queries and streams. Redis has built-in replication, Lua scripting, LRU eviction, transactions and different levels of on-disk persistence, and provides high availability via Redis Sentinel and automatic partitioning with Redis Cluster.
 
