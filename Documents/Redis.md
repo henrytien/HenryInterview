@@ -483,3 +483,11 @@ Saved corefile core.58414
 
 ## [VSCode, MacOS Catalina - doesn't stop on breakpoints on C/C++ debug](https://stackoverflow.com/questions/58329611/vscode-macos-catalina-doesnt-stop-on-breakpoints-on-c-c-debug)
 
+
+
+# Src	
+
+redis-server的main函数位于server.c 中，我们从main开始逐步分析代码的流程。整个redis-server的main函数位于[redis.c:4856](https://github.com/henrytien/redis/blob/unstable/src/server.c#L4856)中，我们从`main`开始逐步分析代码的流程。
+
+<img src="./Images/debug_main.png" style="zoom:50%;" />
+
