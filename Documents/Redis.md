@@ -491,3 +491,143 @@ redis-server的main函数位于server.c 中，我们从main开始逐步分析代
 
 <img src="./Images/debug_main.png" style="zoom:50%;" />
 
+## InitConfig
+
+### struct redisServer
+
+[redisServer](https://github.com/henrytien/redis/blob/unstable/src/server.h#L1014) Server global state.
+
+[initServerConfig](https://github.com/henrytien/redis/blob/unstable/src/server.c#L2272) 
+
+`server.migrate_cached_sockets = dictCreate(&migrateCacheDictType,NULL);`
+
+- [dict](https://github.com/henrytien/redis/blob/unstable/src/dict.h#L76) implement by hash table and when conflict deal with rehash.
+
+```c
+typedef struct dict {
+    dictType *type;
+    void *privdata;
+    dictht ht[2];
+    long rehashidx; /* rehashing not in progress if rehashidx == -1 */
+    unsigned long iterators; /* number of iterators currently running */
+} dict;
+```
+
+```c
+/* Initialize the hash table */
+int _dictInit(dict *d, dictType *type,
+        void *privDataPtr)
+{
+    _dictReset(&d->ht[0]);
+    _dictReset(&d->ht[1]);
+    d->type = type;
+    d->privdata = privDataPtr;
+    d->rehashidx = -1;
+    d->iterators = 0;
+    return DICT_OK;
+}
+```
+
+### Command table
+
+```c
+server.commands = dictCreate(&commandTableDictType,NULL);
+server.orig_commands = dictCreate(&commandTableDictType,NULL);
+```
+
+```c
+/* Command table. sds string -> command struct pointer. */
+dictType commandTableDictType = {
+    dictSdsCaseHash,            /* hash function */
+    NULL,                       /* key dup */
+    NULL,                       /* val dup */
+    dictSdsKeyCaseCompare,      /* key compare */
+    dictSdsDestructor,          /* key destructor */
+    NULL                        /* val destructor */
+};
+```
+
+ Populates the Redis Command Table starting from the hard coded list
+
+[redisCommandTable](https://github.com/henrytien/redis/blob/unstable/src/server.c#L182) Here are struct array, implement by struct of  redisCommand,  numcommands are 202.
+
+```c
+struct redisCommand {
+    char *name;
+    redisCommandProc *proc;
+    int arity;
+    char *sflags;   /* Flags as string representation, one char per flag. */
+    uint64_t flags; /* The actual flags, obtained from the 'sflags' field. */
+    /* Use a function to determine keys arguments in a command line.
+     * Used for Redis Cluster redirect. */
+    redisGetKeysProc *getkeys_proc;
+    /* What keys should be loaded in background when calling this command? */
+    int firstkey; /* The first argument that's a key (0 = no keys) */
+    int lastkey;  /* The last argument that's a key */
+    int keystep;  /* The step between first and last key */
+    long long microseconds, calls;
+    int id;     /* Command ID. This is a progressive ID starting from 0 that
+                   is assigned at runtime, and is used in order to check
+                   ACLs. A connection is able to execute a given command if
+                   the user associated to the connection has this command
+                   bit set in the bitmap of allowed commands. */
+};
+```
+
+### ACLInit
+
+The Redis ACL, short for Access Control List, is the feature that allows certain connections to be limited in terms of the commands that can be executed and the keys that can be accessed.
+
+[ACLSetUser](https://github.com/henrytien/redis/blob/unstable/src/acl.c#L703) Set user properties according to the string "op".
+
+### moduleInitModulesSystem
+
+Set up the keyspace notification susbscriber list and static client .
+
+```c
+ moduleKeyspaceSubscribers = listCreate();
+ moduleFreeContextReusedClient = createClient(NULL);
+```
+
+[server.h/client](https://github.com/henrytien/redis/blob/unstable/src/server.h#L759)
+
+Our thread-safe contexts GIL must start with already locked, it is just unlocked when it's safe.`pthread_mutex_lock(&moduleGIL);` in `moduleInitModulesSystem`.
+
+## Check
+
+### Check redis-check-rdb/aof mode
+
+## initServer
+
+[initServer](https://github.com/henrytien/redis/blob/unstable/src/server.c#L2684), Initialization after setting defaults from the config system. Open the TCP listening socket for the user commands.
+
+[createSharedObjects](https://github.com/henrytien/redis/blob/unstable/src/server.c#L2157) Server initializatio
+
+```c
+typedef struct redisObject {
+    unsigned type:4;
+    unsigned encoding:4;
+    unsigned lru:LRU_BITS; /* LRU time (relative to global lru_clock) or
+                            * LFU data (least significant 8 bits frequency
+                            * and most significant 16 bits access time). */
+    int refcount;
+    void *ptr;
+} robj;
+```
+
+
+
+
+
+
+
+
+
+
+
+## Connect server
+
+when you exec `./redis-cli` 
+
+<img src="./Images/connecting.png" style="zoom:50%;" />
+
