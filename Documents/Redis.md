@@ -807,11 +807,309 @@ typedef struct redisDb {
 } redisDb;
 ```
 
+### timer
+
+Create the timer callback, this is our way to process many background operations incrementally, like clients timeout, eviction of unaccessed expired keys and so forth.
+
+[aeCreateTimeEvent](https://github.com/henrytien/redis/blob/unstable/src/ae.c#L244)
+
+```c
+long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
+        aeTimeProc *proc, void *clientData,
+        aeEventFinalizerProc *finalizerProc)
+{
+    long long id = eventLoop->timeEventNextId++;
+    aeTimeEvent *te;
+
+    te = zmalloc(sizeof(*te));
+    if (te == NULL) return AE_ERR;
+    te->id = id;
+    aeAddMillisecondsToNow(milliseconds,&te->when_sec,&te->when_ms);
+    te->timeProc = proc;
+    te->finalizerProc = finalizerProc;
+    te->clientData = clientData;
+    te->prev = NULL;
+    te->next = eventLoop->timeEventHead;
+    if (te->next)
+        te->next->prev = te;
+    eventLoop->timeEventHead = te;
+    return id;
+}
+```
+
+Here are some other things init. Like `clusterInit()`, `scriptingInit()`,
+
+```c
+if (server.cluster_enabled) clusterInit();
+    replicationScriptCacheInit();
+    scriptingInit(1);
+    slowlogInit();
+    latencyMonitorInit();
+```
+
+## Loading
+
+Load the data when server init.
+
+```c
+ moduleLoadFromQueue(); // Load all the modules in the server
+ ACLLoadUsersAtStartup(); // in order to load the ACLs
+ InitServerLast();
+ loadDataFromDisk();
+```
+
+[InitServerLast](https://github.com/henrytien/redis/blob/unstable/src/server.c#L2887) Specifically, creation of threads due to a race bug in ld.so, in which Thread Local Storage initialization collides with dlopen call.
+
+```c
+void InitServerLast() {
+    /* Initialize the background system, spawning the thread.*/
+    bioInit(); 
+    /* Initialize the data structures needed for threaded I/O. */
+    initThreadedIO();
+    set_jemalloc_bg_thread(server.jemalloc_bg_thread);
+    server.initial_memory_usage = zmalloc_used_memory();
+}
+```
+
+
+
+## Process event
+
+```c
+aeSetBeforeSleepProc(server.el,beforeSleep);
+aeSetAfterSleepProc(server.el,afterSleep);
+aeMain(server.el);
+aeDeleteEventLoop(server.el);
+```
+
+Here are aeMain will proccess event until stop.
+
+```c
+void aeMain(aeEventLoop *eventLoop) {
+    eventLoop->stop = 0;
+    while (!eventLoop->stop) {
+        if (eventLoop->beforesleep != NULL)
+            eventLoop->beforesleep(eventLoop);
+        aeProcessEvents(eventLoop, AE_ALL_EVENTS|AE_CALL_AFTER_SLEEP);
+    }
+}
+```
+
+[aeProcessEvents](https://github.com/henrytien/redis/blob/unstable/src/ae.c#L394) Process every pending time event, then every pending file event (that may be registered by time event callbacks just processed). Without special flags the function sleeps until some file event fires, or when the next time event occurs (if any).
+
+### Timer event
+
+```c
+int aeProcessEvents(aeEventLoop *eventLoop, int flags)
+{
+    int processed = 0, numevents;
+  	//...
+		/* Call the multiplexing API, will return only on timeout or when
+ 		* some event fires. */
+ 		numevents = aeApiPoll(eventLoop, tvp);
+  	//...
+}
+  
+```
+
+This is our timer interrupt, called server.hz times per second. Here is where we do a number of things that need to be done asynchronously. For instance: Triggering BGSAVE / AOF rewrite, and handling of terminated children. Stop the I/O threads if we don't have enough pending work.
+
+[serverCron](https://github.com/henrytien/redis/blob/unstable/src/server.c#L1838) Everything directly called here will be called server.hz times per second.
+
+```c
+int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
+    int j;
+    UNUSED(eventLoop);
+    UNUSED(id);
+    UNUSED(clientData);
+    //...
+		/* We need to do a few operations on clients asynchronously. */
+    clientsCron();
+
+    /* Handle background operations on Redis databases. */
+    databasesCron();
+
+    /* Start a scheduled AOF rewrite if this was requested by the user while
+     * a BGSAVE was in progress. */
+    if (!hasActiveChildProcess() &&
+        server.aof_rewrite_scheduled)
+    {
+        rewriteAppendOnlyFileBackground();
+    }
+    //...
+  	server.cronloops++;
+    return 1000/server.hz;
+}
+```
+
+The serverCron first time registered by aeCreateTimeEvent in [InitServer](https://github.com/henrytien/redis/blob/unstable/src/server.c#L2818).
+
+```c
+/* Create the timer callback, this is our way to process many background
+     * operations incrementally, like clients timeout, eviction of unaccessed
+     * expired keys and so forth. */
+    if (aeCreateTimeEvent(server.el, 1, serverCron, NULL, NULL) == AE_ERR) {
+        serverPanic("Can't create event loop timers.");
+        exit(1);
+    }
+```
+
+
+
+Handle in processTimeEvents.
+
+<img src="./Images/timerProc.png" style="zoom:50%;" />
+
 
 
 ## Connect server
 
+### Accept
+
 when you exec `./redis-cli` 
 
-<img src="./Images/connecting.png" style="zoom:50%;" />
+[acceptTcpHandler](https://github.com/henrytien/redis/blob/unstable/src/networking.c#L896) 
+
+<img src="./Images/acceptTcpHandler.png" style="zoom:50%;" />
+
+Handling by acceptCommonHandler function.
+
+```c
+static void acceptCommonHandler(connection *conn, int flags, char *ip) {
+//...
+/* Create connection and client */
+    if ((c = createClient(conn)) == NULL) {
+        char conninfo[100];
+        serverLog(LL_WARNING,
+            "Error registering fd event for the new client: %s (conn: %s)",
+            connGetLastError(conn),
+            connGetInfo(conn, conninfo, sizeof(conninfo)));
+        connClose(conn); /* May be already closed, just ignore errors */
+        return;
+    }
+	  //...
+   }
+```
+
+### Create Client
+
+Set conn no block, don't delay send to coalesce packets.
+
+```c
+client *createClient(connection *conn) {
+    client *c = zmalloc(sizeof(client));
+
+    /* passing NULL as conn it is possible to create a non connected client.
+     * This is useful since all the commands needs to be executed
+     * in the context of a client. When commands are executed in other
+     * contexts (for instance a Lua script) we need a non connected client. */
+    if (conn) {
+        connNonBlock(conn);
+        connEnableTcpNoDelay(conn);
+        if (server.tcpkeepalive)
+            connKeepAlive(conn,server.tcpkeepalive);
+        connSetReadHandler(conn, readQueryFromClient);
+        connSetPrivateData(conn, c);
+    }
+    // ...
+}
+```
+
+Struct [connection](https://github.com/henrytien/redis/blob/unstable/src/connection.h#L70) 
+
+```c
+struct connection {
+    ConnectionType *type;
+    ConnectionState state;
+    int flags;
+    int last_errno;
+    void *private_data;
+    ConnectionCallbackFunc conn_handler;
+    ConnectionCallbackFunc write_handler;
+    ConnectionCallbackFunc read_handler;
+    int fd;
+};
+```
+
+Note that connAccept() is free to do two things here:
+
+1. Call clientAcceptHandler() immediately;
+
+2. Schedule a future call to clientAcceptHandler().
+
+```c
+if (connAccept(conn, clientAcceptHandler) == C_ERR) {
+        char conninfo[100];
+        serverLog(LL_WARNING,
+                "Error accepting a client connection: %s (conn: %s)",
+                connGetLastError(conn), connGetInfo(conn, conninfo, sizeof(conninfo)));
+        freeClient(connGetPrivateData(conn));
+        return;
+    }
+```
+
+`connAccept()` aims to reduce the need to wait for the next event loop, if no additional handshake is required.
+
+### Read from client
+
+This function is called every time, in the client structure 'c', there is more query buffer to process, because we read more data from the socket or because a client was blocked and later reactivated, so there could be pending query buffer, already representing a full command, to process.
+
+```c
+void processInputBuffer(client *c) {
+    /* Keep processing while there is something in the input buffer */
+    while(c->qb_pos < sdslen(c->querybuf)) {
+        /* Return if clients are paused. */
+        if (!(c->flags & CLIENT_SLAVE) && clientsArePaused()) break;
+        
+    //...
+	
+	 /* Multibulk processing could see a <= 0 length. */
+        if (c->argc == 0) {
+            resetClient(c);
+        } else {
+            /* If we are in the context of an I/O thread, we can't really
+             * execute the command here. All we can do is to flag the client
+             * as one that needs to process the command. */
+            if (c->flags & CLIENT_PENDING_READ) {
+                c->flags |= CLIENT_PENDING_COMMAND;
+                break;
+            }
+
+            /* We are finally ready to execute the command. */
+            if (processCommandAndResetClient(c) == C_ERR) {
+                /* If the client is no longer valid, we avoid exiting this
+                 * loop and trimming the client buffer later. So we return
+                 * ASAP in that case. */
+                return;
+            }
+        }
+}
+    
+```
+
+
+
+This function gets called we already read a whole command, arguments are in the client argv/argc fields. `processCommand()` execute the command or prepare the server for a bulk read from the client.
+
+```c
+int processCommand(client *c) {
+    moduleCallCommandFilters(c);
+
+    /* The QUIT command is handled separately. Normal command procs will
+     * go through checking for replication and QUIT will cause trouble
+     * when FORCE_REPLICATION is enabled and would be implemented in
+     * a regular command proc. */
+    if (!strcasecmp(c->argv[0]->ptr,"quit")) {
+        addReply(c,shared.ok);
+        c->flags |= CLIENT_CLOSE_AFTER_REPLY;
+        return C_ERR;
+    }
+
+    /* Now lookup the command and check ASAP about trivial error conditions
+     * such as wrong arity, bad command name and so forth. */
+    c->cmd = c->lastcmd = lookupCommand(c->argv[0]->ptr);
+    //...
+    
+}
+```
 
