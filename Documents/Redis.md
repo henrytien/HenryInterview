@@ -1050,7 +1050,7 @@ if (connAccept(conn, clientAcceptHandler) == C_ERR) {
 
 `connAccept()` aims to reduce the need to wait for the next event loop, if no additional handshake is required.
 
-### Read from client
+### Read query from client
 
 This function is called every time, in the client structure 'c', there is more query buffer to process, because we read more data from the socket or because a client was blocked and later reactivated, so there could be pending query buffer, already representing a full command, to process.
 
@@ -1111,5 +1111,99 @@ int processCommand(client *c) {
     //...
     
 }
+```
+
+### Process Command
+
+`processCommand()` execute the command or prepare the server for a bulk read from the client.
+
+[processCommand](https://github.com/henrytien/redis/blob/unstable/src/server.c#L3338)
+
+```c
+int processCommand(client *c) {
+//...
+/* Exec the command */
+    if (c->flags & CLIENT_MULTI &&
+        c->cmd->proc != execCommand && c->cmd->proc != discardCommand &&
+        c->cmd->proc != multiCommand && c->cmd->proc != watchCommand)
+    {
+        queueMultiCommand(c);
+        addReply(c,shared.queued);
+    } else {
+        call(c,CMD_CALL_FULL);
+        c->woff = server.master_repl_offset;
+        if (listLength(server.ready_keys))
+            handleClientsBlockedOnKeys();
+    }
+    return C_OK;
+}
+```
+
+
+
+### Write to client
+
+This function is called every time we are going to transmit new data to the client.
+
+```c
+int prepareClientToWrite(client *c) {
+    /* If it's the Lua client we always return ok without installing any
+     * handler since there is no socket at all. */
+    if (c->flags & (CLIENT_LUA|CLIENT_MODULE)) return C_OK;
+
+    /* CLIENT REPLY OFF / SKIP handling: don't send replies. */
+    if (c->flags & (CLIENT_REPLY_OFF|CLIENT_REPLY_SKIP)) return C_ERR;
+
+    /* Masters don't receive replies, unless CLIENT_MASTER_FORCE_REPLY flag
+     * is set. */
+    if ((c->flags & CLIENT_MASTER) &&
+        !(c->flags & CLIENT_MASTER_FORCE_REPLY)) return C_ERR;
+
+    if (!c->conn) return C_ERR; /* Fake client for AOF loading. */
+
+    /* Schedule the client to write the output buffers to the socket, unless
+     * it should already be setup to do so (it has already pending data). */
+    if (!clientHasPendingReplies(c)) clientInstallWriteHandler(c);
+
+    /* Authorize the caller to queue in the output buffer of this client. */
+    return C_OK;
+}
+```
+
+[handleClientsWithPendingWrites](https://github.com/henrytien/redis/blob/unstable/src/networking.c#L1314) This function is called just before entering the event loop, in the hope we can just write the replies to the client output buffer without any need to use a syscall in order to install the writable event handler.
+
+```c
+int handleClientsWithPendingWrites(void) {
+    listIter li;
+    listNode *ln;
+    int processed = listLength(server.clients_pending_write);
+
+    listRewind(server.clients_pending_write,&li);
+    while((ln = listNext(&li))) {
+        client *c = listNodeValue(ln);
+        c->flags &= ~CLIENT_PENDING_WRITE;
+        listDelNode(server.clients_pending_write,ln);
+
+        /* If a client is protected, don't do anything,
+         * that may trigger write error or recreate handler. */
+        if (c->flags & CLIENT_PROTECTED) continue;
+
+        /* Try to write buffers to the client socket. */
+        if (writeToClient(c,0) == C_ERR) continue;
+        //...
+}
+```
+
+### Packet
+
+```c
+/* Protocol and I/O related defines */
+#define PROTO_MAX_QUERYBUF_LEN  (1024*1024*1024) /* 1GB max query buffer. */
+#define PROTO_IOBUF_LEN         (1024*16)  /* Generic I/O buffer size */
+#define PROTO_REPLY_CHUNK_BYTES (16*1024) /* 16k output buffer */
+#define PROTO_INLINE_MAX_SIZE   (1024*64) /* Max size of inline reads */
+#define PROTO_MBULK_BIG_ARG     (1024*32)
+#define LONG_STR_SIZE      21          /* Bytes needed for long -> str + '\0' */
+#define REDIS_AUTOSYNC_BYTES (1024*1024*32) /* fdatasync every 32MB */
 ```
 
