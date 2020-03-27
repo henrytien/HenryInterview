@@ -1219,6 +1219,25 @@ int handleClientsWithPendingWrites(void) {
 }
 ```
 
+
+
+Amount of bytes already sent in the current buffer or object being sent.
+
+```c
+/* If we fully sent the object on head go to the next one */
+if (c->sentlen == objlen) {
+    c->reply_bytes -= o->size;
+    listDelNode(c->reply,listFirst(c->reply));
+    c->sentlen = 0;
+    /* If there are no longer objects in the list, we expect
+    * the count of reply bytes to be exactly zero. */
+    if (listLength(c->reply) == 0)
+    serverAssert(c->reply_bytes == 0);
+}
+```
+
+
+
 ### Packet
 
 ```c
@@ -1283,6 +1302,305 @@ int rdbLoadRio(rio *rdb, int rdbflags, rdbSaveInfo *rsi) {
     buf[9] = '\0';
     
     //...
+}
+```
+
+## DB
+
+### Set operation	
+
+High level Set operation. This function can be used in order to set a key, whatever it was existing or not, to a new object. [genericSetKey]
+
+```c
+void genericSetKey(redisDb *db, robj *key, robj *val, int keepttl) {
+    if (lookupKeyWrite(db,key) == NULL) {
+        dbAdd(db,key,val);
+    } else {
+        dbOverwrite(db,key,val);
+    }
+    incrRefCount(val);
+    if (!keepttl) removeExpire(db,key);
+    signalModifiedKey(db,key);
+}
+```
+
+Create a new key in a Redis database. `dicAdd()`
+
+```c
+/* Add an element to the target hash table */
+int dictAdd(dict *d, void *key, void *val)
+{
+    dictEntry *entry = dictAddRaw(d,key,NULL);
+
+    if (!entry) return DICT_ERR;
+    dictSetVal(d, entry, val);
+    return DICT_OK;
+}
+
+```
+
+HashTable 
+
+```c
+/* This is our hash table structure. Every dictionary has two of this as we
+ * implement incremental rehashing, for the old to the new table. */
+typedef struct dictht {
+    dictEntry **table;
+    unsigned long size;
+    unsigned long sizemask;
+    unsigned long used;
+} dictht;
+```
+
+
+
+Random
+
+```c
+unsigned int dictGetSomeKeys(dict *d, dictEntry **des, unsigned int count) {
+		unsigned long j; /* internal hash table id, 0 or 1. */
+    unsigned long tables; /* 1 or 2 tables? */
+    unsigned long stored = 0, maxsizemask;
+    unsigned long maxsteps;
+
+    if (dictSize(d) < count) count = dictSize(d);
+    maxsteps = count*10;
+
+    /* Try to do a rehashing work proportional to 'count'. */
+    for (j = 0; j < count; j++) {
+        if (dictIsRehashing(d))
+            _dictRehashStep(d);
+        else
+            break;
+    }
+
+    tables = dictIsRehashing(d) ? 2 : 1;
+    maxsizemask = d->ht[0].sizemask;
+    if (tables > 1 && maxsizemask < d->ht[1].sizemask)
+        maxsizemask = d->ht[1].sizemask;
+
+    /* Pick a random point inside the larger table. */
+    unsigned long i = random() & maxsizemask;
+    unsigned long emptylen = 0; /* Continuous empty entries so far. */
+    while(stored < count && maxsteps--) {
+        for (j = 0; j < tables; j++) {
+            if (tables == 2 && j == 0 && i < (unsigned long) d->rehashidx) {
+                if (i >= d->ht[1].size)
+                    i = d->rehashidx;
+                else
+                    continue;
+            }
+            if (i >= d->ht[j].size) continue; /* Out of range for this table. */
+            dictEntry *he = d->ht[j].table[i];
+
+            /* Count contiguous empty buckets, and jump to other
+             * locations if they reach 'count' (with a minimum of 5). */
+            if (he == NULL) {
+                emptylen++;
+                if (emptylen >= 5 && emptylen > count) {
+                    i = random() & maxsizemask;
+                    emptylen = 0;
+                }
+            } else {
+                emptylen = 0;
+                while (he) {
+                    /* Collect all the elements of the buckets found non
+                     * empty while iterating. */
+                    *des = he;
+                    des++;
+                    he = he->next;
+                    stored++;
+                    if (stored == count) return stored;
+                }
+            }
+        }
+        i = (i+1) & maxsizemask;
+    }
+    return stored;
+}
+```
+
+
+
+### Data Type 	
+
+`redisObject`
+
+```c
+typedef struct redisObject {
+    unsigned type:4;
+    unsigned encoding:4;
+    unsigned lru:LRU_BITS; /* LRU time (relative to global lru_clock) or
+                            * LFU data (least significant 8 bits frequency
+                            * and most significant 16 bits access time). */
+    int refcount;
+    void *ptr;
+} robj;
+```
+
+Basically this structure can represent all the basic Redis data types like  strings, lists, sets, sorted sets and so forth. The interesting thing is that it has a `type` field, so that it is possible to know what type a given object has, and a `refcount`, so that the same object can be referenced in multiple places without allocating it multiple times. Finally the `ptr`  field points to the actual representation of the object, which might vary even for the same type, depending on the `encoding` used.
+
+
+
+`sds.c` is the Redis string library, check http://github.com/antirez/sds for more information.
+
+The string is always null-termined (all the sds strings are, always)
+
+```c
+struct __attribute__ ((__packed__)) sdshdr8 {
+    uint8_t len; /* used */
+    uint8_t alloc; /* excluding the header and null terminator */
+    unsigned char flags; /* 3 lsb of type, 5 unused bits */
+    char buf[];
+};
+```
+
+[Sds](https://github.com/henrytien/redis/blob/unstable/src/sds.c#L81) Create a new sds string with the content specified by the 'init' pointer and initlen
+
+```c
+sds sdsnewlen(const void *init, size_t initlen) {
+    void *sh;
+    sds s;
+    char type = sdsReqType(initlen);
+    /* Empty strings are usually created in order to append. Use type 8
+     * since type 5 is not good at this. */
+    if (type == SDS_TYPE_5 && initlen == 0) type = SDS_TYPE_8;
+    int hdrlen = sdsHdrSize(type);
+    unsigned char *fp; /* flags pointer. */
+
+    sh = s_malloc(hdrlen+initlen+1);
+    if (sh == NULL) return NULL;
+    if (!init)
+        memset(sh, 0, hdrlen+initlen+1);
+    s = (char*)sh+hdrlen;
+    fp = ((unsigned char*)s)-1;
+    switch(type) {
+        case SDS_TYPE_5: {
+            *fp = type | (initlen << SDS_TYPE_BITS);
+            break;
+        }
+        case SDS_TYPE_8: {
+            SDS_HDR_VAR(8,s);
+            sh->len = initlen;
+            sh->alloc = initlen;
+            *fp = type;
+            break;
+        }
+        //...
+    }
+    if (initlen && init)
+        memcpy(s, init, initlen);
+    s[initlen] = '\0';
+    return s;
+}
+
+```
+
+[Ziplist](https://github.com/henrytien/redis/blob/unstable/src/zplist.c#L1)
+
+The ziplist is a specially encoded dually linked list that is designed  to be very memory efficient. It stores both strings and integer values, where integers are encoded as actual integers instead of a series of characters.
+
+[Skiplist](https://github.com/henrytien/redis/blob/unstable/src/server.h#L877)
+
+```c
+/* ZSETs use a specialized version of Skiplists */
+typedef struct zskiplistNode {
+    sds ele;
+    double score;
+    struct zskiplistNode *backward;
+    struct zskiplistLevel {
+        struct zskiplistNode *forward;
+        unsigned long span;
+    } level[];
+} zskiplistNode;
+
+typedef struct zskiplist {
+    struct zskiplistNode *header, *tail;
+    unsigned long length;
+    int level;
+} zskiplist;
+
+```
+
+Zset 
+
+```c
+typedef struct zset {
+    dict *dict;
+    zskiplist *zsl;
+} zset;
+```
+
+
+
+[zslCreate](https://github.com/henrytien/redis/blob/unstable/src/zset.c#L80) Create a new skiplist. Should be enough for 2^64 elements.
+
+```c
+zskiplist *zslCreate(void) {
+    int j;
+    zskiplist *zsl;
+
+    zsl = zmalloc(sizeof(*zsl));
+    zsl->level = 1;
+    zsl->length = 0;
+    zsl->header = zslCreateNode(ZSKIPLIST_MAXLEVEL,0,NULL);
+    for (j = 0; j < ZSKIPLIST_MAXLEVEL; j++) {
+        zsl->header->level[j].forward = NULL;
+        zsl->header->level[j].span = 0;
+    }
+    zsl->header->backward = NULL;
+    zsl->tail = NULL;
+    return zsl;
+}
+```
+
+## HyperLogLog
+
+HyperLogLog data structure.
+
+```c
+struct hllhdr {
+    char magic[4];      /* "HYLL" */
+    uint8_t encoding;   /* HLL_DENSE or HLL_SPARSE. */
+    uint8_t notused[3]; /* Reserved for future use, must be zero. */
+    uint8_t card[8];    /* Cached cardinality, little endian. */
+    uint8_t registers[]; /* Data bytes. */
+};
+```
+
+Create an HLL object. We always create the HLL using sparse encoding. [createHLLObject](https://github.com/henrytien/redis/blob/unstable/src/hyperloglog.c#L1114)
+
+```c
+robj *createHLLObject(void) {
+    robj *o;
+    struct hllhdr *hdr;
+    sds s;
+    uint8_t *p;
+    int sparselen = HLL_HDR_SIZE +
+                    (((HLL_REGISTERS+(HLL_SPARSE_XZERO_MAX_LEN-1)) /
+                     HLL_SPARSE_XZERO_MAX_LEN)*2);
+    int aux;
+
+    /* Populate the sparse representation with as many XZERO opcodes as
+     * needed to represent all the registers. */
+    aux = HLL_REGISTERS;
+    s = sdsnewlen(NULL,sparselen);
+    p = (uint8_t*)s + HLL_HDR_SIZE;
+    while(aux) {
+        int xzero = HLL_SPARSE_XZERO_MAX_LEN;
+        if (xzero > aux) xzero = aux;
+        HLL_SPARSE_XZERO_SET(p,xzero);
+        p += 2;
+        aux -= xzero;
+    }
+    serverAssert((p-(uint8_t*)s) == sparselen);
+
+    /* Create the actual object. */
+    o = createObject(OBJ_STRING,s);
+    hdr = o->ptr;
+    memcpy(hdr->magic,"HYLL",4);
+    hdr->encoding = HLL_SPARSE;
+    return o;
 }
 ```
 
