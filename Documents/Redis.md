@@ -912,6 +912,31 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
   
 ```
 
+
+
+Call the multiplexing API, will return only on timeout or when some event fires.
+
+```c
+static int aeApiPoll(aeEventLoop *eventLoop, struct timeval *tvp) {
+    aeApiState *state = eventLoop->apidata;
+    int retval, numevents = 0;
+
+    if (tvp != NULL) {
+        struct timespec timeout;
+        timeout.tv_sec = tvp->tv_sec;
+        timeout.tv_nsec = tvp->tv_usec * 1000;
+        retval = kevent(state->kqfd, NULL, 0, state->events, eventLoop->setsize,
+                        &timeout);
+    } else {
+        retval = kevent(state->kqfd, NULL, 0, state->events, eventLoop->setsize,
+                        NULL);
+    }
+    //...
+}
+```
+
+
+
 This is our timer interrupt, called server.hz times per second. Here is where we do a number of things that need to be done asynchronously. For instance: Triggering BGSAVE / AOF rewrite, and handling of terminated children. Stop the I/O threads if we don't have enough pending work.
 
 [serverCron](https://github.com/henrytien/redis/blob/unstable/src/server.c#L1838) Everything directly called here will be called server.hz times per second.
@@ -1205,5 +1230,59 @@ int handleClientsWithPendingWrites(void) {
 #define PROTO_MBULK_BIG_ARG     (1024*32)
 #define LONG_STR_SIZE      21          /* Bytes needed for long -> str + '\0' */
 #define REDIS_AUTOSYNC_BYTES (1024*1024*32) /* fdatasync every 32MB */
+```
+
+
+
+aof.c and rdb.c
+
+---
+
+As you can guess from the names these files implement the RDB and AOF
+
+persistence for Redis. Redis uses a persistence model based on the `fork()`
+
+system call in order to create a thread with the same (shared) memory
+
+content of the main Redis thread. This secondary thread dumps the content
+
+of the memory on disk. This is used by `rdb.c` to create the snapshots
+
+on disk and by `aof.c` in order to perform the AOF rewrite when the
+
+append only file gets too big.
+
+
+
+The implementation inside `aof.c` has additional functions in order to
+
+implement an API that allows commands to append new commands into the AOF
+
+file as clients execute them.
+
+
+
+The `call()` function defined inside `server.c` is responsible to call
+
+the functions that in turn will write the commands into the AOF.
+
+
+
+[rdbLoadRio](https://github.com/henrytien/redis/blob/unstable/src/rdb.c#L2023) Load an RDB file from the rio stream 'rdb'.
+
+```c
+int rdbLoadRio(rio *rdb, int rdbflags, rdbSaveInfo *rsi) {
+    uint64_t dbid;
+    int type, rdbver;
+    redisDb *db = server.db+0;
+    char buf[1024];
+
+    rdb->update_cksum = rdbLoadProgressCallback;
+    rdb->max_processing_chunk = server.loading_process_events_interval_bytes;
+    if (rioRead(rdb,buf,9) == 0) goto eoferr;  // Here rio 
+    buf[9] = '\0';
+    
+    //...
+}
 ```
 
