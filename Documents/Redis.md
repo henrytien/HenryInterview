@@ -1556,6 +1556,8 @@ zskiplist *zslCreate(void) {
 
 ## HyperLogLog
 
+HyperLogLog is similar to a Bloom filter internally as it runs items through a non-cryptographic hash and sets bits in a form of a bitfield. Unlike a Bloom filter, HyperLogLog keeps a counter of items that is incremented when new items are added that have not been previously added. This provides a very low error rate when estimating the unique items (cardinality) of a set. HyperLogLog is built right into Redis.
+
 HyperLogLog data structure.
 
 ```c
@@ -1602,5 +1604,282 @@ robj *createHLLObject(void) {
     hdr->encoding = HLL_SPARSE;
     return o;
 }
+```
+
+
+
+This function is actually a wrapper for [hllSparseSet(),](https://github.com/henrytien/redis/blob/unstable/src/hyperloglog.c#L903) it only performs the hashshing of the elmenet to obtain the index and zeros run length. And know about more [Redis new data structure: the HyperLogLog](http://antirez.com/news/75)
+
+```c
+int hllSparseAdd(robj *o, unsigned char *ele, size_t elesize) {
+    long index;
+    uint8_t count = hllPatLen(ele,elesize,&index);
+    /* Update the register if this element produced a longer run of zeroes. */
+    return hllSparseSet(o,index,count);
+}
+```
+
+```shell
+127.0.0.1:6379> pfadd mjhyper math 520
+(integer) 1
+(480.20s)
+127.0.0.1:6379>
+127.0.0.1:6379> PFMERGE henrymj mjhyper henryhyper
+OK
+(5.61s)
+127.0.0.1:6379> PFCOUNT henrymj
+(integer) 2
+(4.62s)
+```
+
+## Pub/Sub
+
+Examples 
+
+Subscribe mjmsg
+
+```shell
+127.0.0.1:6379> subscribe mjmsg
+Reading messages... (press Ctrl-C to quit)
+1) "subscribe"
+2) "mjmsg"
+3) (integer) 1
+1) "message"
+2) "mjmsg"
+3) "I love you"
+```
+
+Publish mjmsg 
+
+```shell
+127.0.0.1:6379> publish mjmsg "I love you"
+(integer) 1
+127.0.0.1:6379>
+```
+
+[pubsubSubscribeChannel](https://github.com/henrytien/redis/blob/unstable/src/pubsub.c#L149) Subscribe a client to a channel. Returns 1 if the operation succeeded, or 0 if the client was already subscribed to that channel.
+
+```c
+int pubsubSubscribeChannel(client *c, robj *channel) {
+    dictEntry *de;
+    list *clients = NULL;
+    int retval = 0;
+
+    /* Add the channel to the client -> channels hash table */
+    if (dictAdd(c->pubsub_channels,channel,NULL) == DICT_OK) {
+        retval = 1;
+        incrRefCount(channel);
+        /* Add the client to the channel -> list of clients hash table */
+        de = dictFind(server.pubsub_channels,channel);
+        if (de == NULL) {
+            clients = listCreate();
+            dictAdd(server.pubsub_channels,channel,clients);
+            incrRefCount(channel);
+        } else {
+            clients = dictGetVal(de);
+        }
+        listAddNodeTail(clients,c);
+    }
+    /* Notify the client */
+    addReplyPubsubSubscribed(c,channel);
+    return retval;
+}
+```
+
+### Pattern-matching subscriptions
+
+The Redis Pub/Sub implementation supports pattern matching. Clients may subscribe to glob-style patterns in order to receive all the messages sent to channel names matching a given pattern.
+
+```shell
+127.0.0.1:6379> psubscribe mjmsg.*
+Reading messages... (press Ctrl-C to quit)
+1) "psubscribe"
+2) "mjmsg.*"
+3) (integer) 1
+1) "pmessage"
+2) "mjmsg.*"
+3) "mjmsg.love"
+4) "I love you"
+1) "pmessage"
+2) "mjmsg.*"
+3) "mjmsg.i"
+4) "I love henry"
+```
+
+
+
+```shell
+127.0.0.1:6379> PUBLISH mjmsg.love "I love you"
+(integer) 1
+127.0.0.1:6379> publish mjmsg.i "I love henry"
+(integer) 1
+127.0.0.1:6379>
+```
+
+[pubsubSubscribePattern](https://github.com/henrytien/redis/blob/unstable/src/pubsub.c#L208)
+
+```c
+int pubsubSubscribePattern(client *c, robj *pattern) {
+    int retval = 0;
+
+    if (listSearchKey(c->pubsub_patterns,pattern) == NULL) {
+        retval = 1;
+        pubsubPattern *pat;
+        listAddNodeTail(c->pubsub_patterns,pattern);
+        incrRefCount(pattern);
+        pat = zmalloc(sizeof(*pat));
+        pat->pattern = getDecodedObject(pattern);
+        pat->client = c;
+        listAddNodeTail(server.pubsub_patterns,pat);
+    }
+    /* Notify the client */
+    addReplyPubsubPatSubscribed(c,pattern);
+    return retval;
+}
+```
+
+
+
+### Publish a message
+
+Send to clients listening for that channel, Send to clients listening to matching channels.
+
+```c
+int pubsubPublishMessage(robj *channel, robj *message) {
+    //...
+    /* Send to clients listening for that channel */
+    de = dictFind(server.pubsub_channels,channel);
+    if (de) {
+        list *list = dictGetVal(de);
+        listNode *ln;
+        listIter li;
+
+        listRewind(list,&li);
+        while ((ln = listNext(&li)) != NULL) {
+            client *c = ln->value;
+            addReplyPubsubMessage(c,channel,message);
+            receivers++;
+        }
+    }
+    /* Send to clients listening to matching channels */
+    if (listLength(server.pubsub_patterns)) {
+        listRewind(server.pubsub_patterns,&li);
+        channel = getDecodedObject(channel);
+        while ((ln = listNext(&li)) != NULL) {
+            pubsubPattern *pat = ln->value;
+
+            if (stringmatchlen((char*)pat->pattern->ptr,
+                                sdslen(pat->pattern->ptr),
+                                (char*)channel->ptr,
+                                sdslen(channel->ptr),0))
+            {
+                addReplyPubsubPatMessage(pat->client,
+                    pat->pattern,channel,message);
+                receivers++;
+            }
+        }
+        decrRefCount(channel);
+    }
+    return receivers;
+}
+```
+
+##  Transactions
+
+[MULTI](https://redis.io/commands/multi), [EXEC](https://redis.io/commands/exec), [DISCARD](https://redis.io/commands/discard) and [WATCH](https://redis.io/commands/watch) are the foundation of transactions in Redis.
+
+- All the commands in a transaction are serialized and executed sequentially.
+- Either all of the commands or none are processed, so a Redis transaction is also atomic.
+
+```c
+/* Exec the command */
+    if (c->flags & CLIENT_MULTI &&
+        c->cmd->proc != execCommand && c->cmd->proc != discardCommand &&
+        c->cmd->proc != multiCommand && c->cmd->proc != watchCommand)
+    {
+        queueMultiCommand(c);
+        addReply(c,shared.queued);
+    }
+```
+
+Multi command
+
+```shell
+127.0.0.1:6379> MULTI
+OK
+127.0.0.1:6379> set mj "I love you 520"
+QUEUED
+(67.10s)
+127.0.0.1:6379> set henry "I love you 520"
+QUEUED
+(22.00s)
+127.0.0.1:6379> exec
+1) OK
+2) OK
+(353.96s)
+```
+
+
+
+### Exec 
+
+- Check 
+
+  ```c
+  if (c->flags & (CLIENT_DIRTY_CAS|CLIENT_DIRTY_EXEC)) {
+          addReply(c, c->flags & CLIENT_DIRTY_EXEC ? shared.execaborterr :
+                                                     shared.nullarray[c->resp]);
+          discardTransaction(c);
+          goto handle_monitor;
+      }
+  ```
+
+  
+
+###  Optimistic locking using check-and-set
+
+`WATCH`ed keys are monitored in order to detect changes against them. If at least one watched key is modified before the [EXEC](https://redis.io/commands/exec) command, the whole transaction aborts, and [EXEC](https://redis.io/commands/exec) returns a [Null reply](https://redis.io/topics/protocol#nil-reply) to notify that the transaction failed.
+
+
+
+```c
+typedef struct redisDb {
+    dict *dict;                 /* The keyspace for this DB */
+    dict *expires;              /* Timeout of keys with a timeout set */
+    dict *blocking_keys;        /* Keys with clients waiting for data (BLPOP)*/
+    dict *ready_keys;           /* Blocked keys that received a PUSH */
+    dict *watched_keys;         /* WATCHED keys for MULTI/EXEC CAS */
+    int id;                     /* Database ID */
+    long long avg_ttl;          /* Average TTL, just for stats */
+    unsigned long expires_cursor; /* Cursor of the active expire cycle. */
+    list *defrag_later;         /* List of key names to attempt to defrag one by one, gradually. */
+} redisDb;
+```
+
+Watch for the specified key. watchForKey
+
+```c
+void watchForKey(client *c, robj *key) {
+    list *clients = NULL;
+    listIter li;
+    listNode *ln;
+    watchedKey *wk;
+
+    /* Check if we are already watching for this key */
+    listRewind(c->watched_keys,&li);
+    while((ln = listNext(&li))) {
+        wk = listNodeValue(ln);
+        if (wk->db == c->db && equalStringObjects(key,wk->key))
+            return; /* Key already watched */
+    }
+    /* This key is not already watched in this DB. Let's add it */
+    clients = dictFetchValue(c->db->watched_keys,key);
+    if (!clients) {
+        clients = listCreate();
+        dictAdd(c->db->watched_keys,key,clients);
+        incrRefCount(key);
+    }
+    //...
+    }
 ```
 
