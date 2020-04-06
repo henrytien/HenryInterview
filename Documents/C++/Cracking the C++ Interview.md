@@ -11,12 +11,12 @@ If multiple threads attempt to initialize the same static local variable concurr
 Note: usual implementations of this feature use variants of the double-checked locking pattern, which reduces runtime overhead for already-initialized local statics to a single non-atomic boolean comparison.
 (since C++11)
 The destructor for a block-scope static variable is called at program exit, but only if the initialization took place successfully.
-Function-local static objects in all definitions of the same inline function (which may be implicitly inline) all refer to the same object defined in one translation unit.
+Function-local static objects in all definitions of the same `inline` function (which may be implicitly inline) all refer to the same object defined in one translation unit.
 
 ### Static member functions
 
-Static member functions are not associated with any object. When called, they have no this pointer.
-Static member functions cannot be virtual, const, or volatile.
+Static member functions are not associated with any object. When called, they have no `this` pointer.
+Static member functions cannot be `virtual`, `const`, or `volatile`.
 The address of a static member function may be stored in a regular pointer to function, but not in a pointer to member function.
 
 
