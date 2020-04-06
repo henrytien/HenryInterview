@@ -19,6 +19,26 @@ Static member functions are not associated with any object. When called, they ha
 Static member functions cannot be `virtual`, `const`, or `volatile`.
 The address of a static member function may be stored in a regular pointer to function, but not in a pointer to member function.
 
+```c++
+struct X
+{
+    inline static int n = 1;
+};
+```
+
+Constant static members
+If a static data member of integral or enumeration type is declared const (and not volatile), it can be initialized with an initializer in which every expression is a constant expression, right inside the class definition:
+
+```c++
+struct X
+{
+    const static int n = 1;
+    const static int m{2}; // since C++11
+    const static int k;
+};
+const int X::k = 3;
+```
+
 
 ### Memory of layout of a c/c++ pramgram
 ![](./Images/memory_layout.jpg)
