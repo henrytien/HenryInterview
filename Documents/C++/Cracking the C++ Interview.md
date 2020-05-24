@@ -211,7 +211,10 @@ void memcpy(void* dest, void* src, int size)
 
 - **Open Addressing**: In open addressing, all elements are sorted in hash table itself. Each table entry contains either a record or NIL. when searching for an element, we one by one examine table slots util the desire element is found or it is clear that the element is not in the table. 
 
-  
+## Debug
+### How to find memory leak in a C++ code/project?
+
+[stackoverflow](https://stackoverflow.com/questions/6261201/how-to-find-memory-leak-in-a-c-code-project)
 
 ## Effective C++
 
