@@ -214,7 +214,9 @@ void memcpy(void* dest, void* src, int size)
 ## Debug
 ### How to find memory leak in a C++ code/project?
 
-[stackoverflow](https://stackoverflow.com/questions/6261201/how-to-find-memory-leak-in-a-c-code-project)
+[stackoverflow](https://stackoverflow.com/questions/6261201/how-to-find-memory-leak-in-a-c-code-project) 
+
+If the leak yet allowed - I'm usually seeking it with deleaker (check it here: [http://deleaker.com](http://deleaker.com/)).
 
 ## Effective C++
 
