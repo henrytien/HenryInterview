@@ -1,3 +1,3 @@
 # MySQL实战45讲
 
-![基础大纲](../Images/mysql01.jpg)
+![基础大纲](../images/mysql01.jpg)
