@@ -51,7 +51,7 @@ MySQL 里经常说到的 WAL 技术，WAL 的全称是 Write-Ahead Logging，它
 2. redo log 是物理日志，记录的是“在某个数据页上做了什么修改”；binlog 是逻辑日志，记录的是这个语句的原始逻辑，比如“给 ID=2 这一行的 c 字段加 1 ”。
 3. redo log 是循环写的，空间固定会用完；binlog 是可以追加写入的。“追加写”是指 binlog 文件写到一定大小后会切换到下一个，并不会覆盖以前的日志。
 
-![](../images/update_sql.png)
+<img src="../images/update_sql.png" style="zoom:50%;" />
 
 ### 两阶段提交
 
@@ -76,7 +76,7 @@ mysql> create table T(c int) engine=InnoDB;
 insert into T(c) values(1);
 ```
 
-![](../images/shiwu.png)
+<img src="../images/shiwu.png" style="zoom:50%;" />
 
 在“读提交”隔离级别下，这个视图是在每个 SQL 语句开始执行的时候创建的。这里需要注意的是，“读未提交”隔离级别下直接返回记录上的最新值，没有视图概念；而“串行化”隔离级别下直接用加锁的方式来避免并行访问。
 
@@ -174,3 +174,103 @@ alter table T add primary key(id);
 2. Percona 的 pt-kill 这个工具不错，推荐使用；
 3. 在业务功能测试阶段要求输出所有的 general_log，分析日志行为提前发现问题；
 4. 如果使用的是 MySQL 5.6 或者更新版本，把 innodb_undo_tablespaces 设置成 2（或更大的值）。如果真的出现大事务导致回滚段过大，这样设置后清理起来更方便。
+
+## 05 | 深入浅出索引（下）
+
+在下面这个表 T 中，如果我执行 select * from T where k between 3 and 5，需要执行几次树的搜索操作，会扫描多少行？
+
+```mysql
+mysql> create table T (
+ID int primary key,
+k int NOT NULL DEFAULT 0, 
+s varchar(16) NOT NULL DEFAULT '',
+index k(k))
+engine=InnoDB;
+ 
+insert into T values(100,1, 'aa'),(200,2,'bb'),(300,3,'cc'),(500,5,'ee'),(600,6,'ff'),(700,7,'gg');
+
+```
+
+<img src="../images/mysql04.png" style="zoom:50%;" />
+
+我们一起来看看这条 SQL 查询语句的执行流程：
+
+1. 在 k 索引树上找到 k=3 的记录，取得 ID = 300；
+2. 再到 ID 索引树查到 ID=300 对应的 R3；
+3. 在 k 索引树取下一个值 k=5，取得 ID=500；
+4. 再回到 ID 索引树查到 ID=500 对应的 R4；
+5. 在 k 索引树取下一个值 k=6，不满足条件，循环结束。
+
+在这个过程中，**回到主键索引树搜索的过程，我们称为回表**。
+
+有没有可能经过索引优化，避免回表过程呢？
+
+### 覆盖索引
+
+**由于覆盖索引可以减少树的搜索次数，显著提升查询性能，所以使用覆盖索引是一个常用的性能优化手段。**
+
+```mysql
+CREATE TABLE `tuser` (
+  `id` int(11) NOT NULL,
+  `id_card` varchar(32) DEFAULT NULL,
+  `name` varchar(32) DEFAULT NULL,
+  `age` int(11) DEFAULT NULL,
+  `ismale` tinyint(1) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `id_card` (`id_card`),
+  KEY `name_age` (`name`,`age`)
+) ENGINE=InnoDB
+```
+
+如果现在有一个高频请求，要根据市民的身份证号查询他的姓名，这个联合索引就有意义了。它可以在这个高频请求上用到覆盖索引，不再需要回表查整行记录，减少语句的执行时间。
+
+### 最左前缀原则
+
+**B+ 树这种索引结构，可以利用索引的“最左前缀”，来定位记录。**
+
+<img src="../images/mysql0402.jpeg" style="zoom:50%;" />
+
+ 如果你要查的是所有名字第一个字是“张”的人，你的 SQL 语句的条件是"where name like ‘张 %’"。
+
+**在建立联合索引的时候，如何安排索引内的字段顺序。**
+
+所以当已经有了 (a,b) 这个联合索引后，一般就不需要单独在 a 上建立索引了。因此，**第一原则是，如果通过调整顺序，可以少维护一个索引，那么这个顺序往往就是需要优先考虑采用的。**
+
+### 索引下推
+
+`mysql> select * from tuser where name like '张 %' and age=10 and ismale=1;`
+
+MySQL 5.6 引入的索引下推优化（index condition pushdown)， 可以在索引遍历过程中，对索引中包含的字段先做判断，直接过滤掉不满足条件的记录，减少回表次数。
+
+<img src="../images/mysql0403.jpeg" style="zoom:50%;" />
+
+InnoDB 在 (name,age) 索引内部就判断了 age 是否等于 10，对于不等于 10 的记录，直接判断并跳过。在我们的这个例子中，只需要对 ID4、ID5 这两条记录回表取数据判断，就只需要回表 2 次。
+
+```mysql
+CREATE TABLE `geek` (
+  `a` int(11) NOT NULL,
+  `b` int(11) NOT NULL,
+  `c` int(11) NOT NULL,
+  `d` int(11) NOT NULL,
+  PRIMARY KEY (`a`,`b`),
+  KEY `c` (`c`),
+  KEY `ca` (`c`,`a`),
+  KEY `cb` (`c`,`b`)
+) ENGINE=InnoDB;
+```
+
+为了这两个查询模式，这两个索引是否都是必须的？为什么呢？
+
+```mysql
+select * from geek where c=N order by a limit 1;
+select * from geek where c=N order by b limit 1;
+```
+
+通过两个 alter 语句重建索引 k，以及通过两个 alter 语句重建主键索引是否合理？
+
+是，重建索引的过程会创建一个新的索引，把数据按顺序插入，这样页面的利用率最高，也就是索引更紧凑、更省空间。
+
+不论是删除主键还是创建主键，都会将整个表重建。所以连着执行这两个语句的话，第一个语句就白做了。这两个语句，你可以用这个语句代替 ： alter table T engine=InnoDB。
+
+> InnoDB 这种引擎,虽然删除了表的部分记录,但是它的索引还在, 并未释放空间，所以记得删除表之后删除索引。
+
