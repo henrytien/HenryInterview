@@ -94,11 +94,11 @@ mysql> show variables like 'transaction_isolation';
 +-----------------------+----------------+
 ```
 
-## 事务隔离的实现
+### 事务隔离的实现
 
 在 MySQL 中，实际上每条记录在更新的时候都会同时记录一条回滚操作。记录上的最新值，通过回滚操作，都可以得到前一个状态的值。除了对回滚段的影响，长事务还占用锁资源，也可能拖垮整个库，这个我们会在后面讲锁的时候展开。
 
-## 事务的启动方式
+### 事务的启动方式
 
 1. 显式启动事务语句， begin 或 start transaction。配套的提交语句是 commit，回滚语句是 rollback。
 2. set autocommit=0，这个命令会将这个线程的自动提交关掉。意味着如果你只执行一个 select 语句，这个事务就启动了，而且并不会自动提交。这个事务持续存在直到你主动执行 commit 或 rollback 语句，或者断开连接。
@@ -107,3 +107,70 @@ mysql> show variables like 'transaction_isolation';
 
 `select * from information_schema.innodb_trx where TIME_TO_SEC(timediff(now(),trx_started))>60`
 
+## 04 | 深入浅出索引（上）
+
+一句话简单来说，索引的出现其实就是为了提高数据查询的效率，就像书的目录一样。
+
+**哈希表这种结构适用于只有等值查询的场景**，比如 Memcached 及其他一些 NoSQL 引擎。
+
+你可以想象一下一棵 100 万节点的平衡二叉树，树高 20。一次查询可能需要访问 20 个数据块。在机械硬盘时代，从磁盘随机读一个数据块需要 10 ms 左右的寻址时间。也就是说，对于一个 100 万行的表，如果使用二叉树来存储，单独访问一个行可能需要 20 个 10 ms 的时间，这个查询可真够慢的。
+
+### InnoDB 的索引模型
+
+```mysql
+mysql> create table T(
+id int primary key, 
+k int not null, 
+name varchar(16),
+index (k))engine=InnoDB;
+```
+
+![InnoDB 的索引组织结构](../images/InnoDB 的索引组织结构.png)
+
+根据上面的索引结构说明，我们来讨论一个问题：**基于主键索引和普通索引的查询有什么区别？**
+
+- 如果语句是 select * from T where ID=500，即主键查询方式，则只需要搜索 ID 这棵 B+ 树；
+- 如果语句是 select * from T where k=5，即普通索引查询方式，则需要先搜索 k 索引树，得到 ID 的值为 500，再到 ID 索引树搜索一次。这个过程称为回表。
+
+### 索引维护
+
+基于上面的索引维护过程说明，我们来讨论一个案例：
+
+> 你可能在一些建表规范里面见到过类似的描述，要求建表语句里一定要有自增主键。当然事无绝对，我们来分析一下哪些场景下应该使用自增主键，而哪些场景下不应该。
+
+自增主键是指自增列上定义的主键，在建表语句中一般是这么定义的： NOT NULL PRIMARY KEY AUTO_INCREMENT。
+
+**显然，主键长度越小，普通索引的叶子节点就越小，普通索引占用的空间也就越小。**
+
+所以，从性能和存储空间方面考量，自增主键往往是更合理的选择。
+
+### 小结
+
+B+ 树能够很好地配合磁盘的读写特性，减少单次查询的磁盘访问次数。
+
+```mysql
+alter table T drop index k;
+alter table T add index(k);
+```
+
+如果你要重建主键索引，也可以这么写：
+
+```mysql
+alter table T drop primary key;
+alter table T add primary key(id);
+```
+
+### 如何避免长事务对业务的影响？
+
+**首先，从应用开发端来看：**
+
+1. 确认是否使用了 set autocommit=0。这个确认工作可以在测试环境中开展，把 MySQL 的 general_log 开起来，然后随便跑一个业务逻辑，通过 general_log 的日志来确认。一般框架如果会设置这个值，也就会提供参数来控制行为，你的目标就是把它改成 1。
+2. 确认是否有不必要的只读事务。有些框架会习惯不管什么语句先用 begin/commit 框起来。我见过有些是业务并没有这个需要，但是也把好几个 select 语句放到了事务中。这种只读事务可以去掉。
+3. 业务连接数据库的时候，根据业务本身的预估，通过 SET MAX_EXECUTION_TIME 命令，来控制每个语句执行的最长时间，避免单个语句意外执行太长时间。（为什么会意外？在后续的文章中会提到这类案例）
+
+**其次，从数据库端来看：**
+
+1. 监控 information_schema.Innodb_trx 表，设置长事务阈值，超过就报警 / 或者 kill；
+2. Percona 的 pt-kill 这个工具不错，推荐使用；
+3. 在业务功能测试阶段要求输出所有的 general_log，分析日志行为提前发现问题；
+4. 如果使用的是 MySQL 5.6 或者更新版本，把 innodb_undo_tablespaces 设置成 2（或更大的值）。如果真的出现大事务导致回滚段过大，这样设置后清理起来更方便。
