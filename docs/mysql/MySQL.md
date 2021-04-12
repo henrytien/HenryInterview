@@ -125,7 +125,7 @@ name varchar(16),
 index (k))engine=InnoDB;
 ```
 
-![InnoDB 的索引组织结构](../images/InnoDB 的索引组织结构.png)
+<img src="../images/InnoDB 的索引组织结构.png" style="zoom:50%;" />
 
 根据上面的索引结构说明，我们来讨论一个问题：**基于主键索引和普通索引的查询有什么区别？**
 
