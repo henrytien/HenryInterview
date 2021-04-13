@@ -357,3 +357,72 @@ MySQL 里面表级别的锁有两种：一种是表锁，一种是元数据锁�
 - 第三种，在 20 个连接中同时执行 delete from T limit 500。
 
 你会选择哪一种方法呢？为什么呢？
+
+在一个连接中循环执行 20 次 delete from T limit 500。
+
+确实是这样的，第二种方式是相对较好的。
+
+第一种方式（即：直接执行 delete from T limit 10000）里面，单个语句占用时间长，锁的时间也比较长；而且大事务还会导致主从延迟。
+
+第三种方式（即：在 20 个连接中同时执行 delete from T limit 500），会人为造成锁冲突。
+
+## 08 | 事务到底是隔离的还是不隔离的？
+
+在 MySQL 里，有两个“视图”的概念：
+
+- 一个是 view。它是一个用查询语句定义的虚拟表，在调用的时候执行查询语句并生成结果。创建视图的语法是 create view … ，而它的查询方法与表一样。
+- 另一个是 InnoDB 在实现 MVCC 时用到的一致性读视图，即 consistent read view，用于支持 RC（Read Committed，读提交）和 RR（Repeatable Read，可重复读）隔离级别的实现。
+
+### “快照”在 MVCC 里是怎么工作的？
+
+我们先来看看这个快照是怎么实现的。
+
+InnoDB 里面每个事务有一个唯一的事务 ID，叫作 transaction id。它是在事务开始的时候向 InnoDB 的事务系统申请的，是按申请顺序严格递增的。
+
+<img src="../images/mysql0802.png" style="zoom:50%;" />
+
+图中虚线框里是同一行数据的 4 个版本，当前最新版本是 V4，k 的值是 22，它是被 transaction id 为 25 的事务更新的，因此它的 row trx_id 也是 25。
+
+<img src="../images/mysql0803.png" style="zoom:50%;" />
+
+1. 如果落在绿色部分，表示这个版本是已提交的事务或者是当前事务自己生成的，这个数据是可见的；
+2. 如果落在红色部分，表示这个版本是由将来启动的事务生成的，是肯定不可见的；
+3. 如果落在黄色部分，那就包括两种情况
+   a. 若 row trx_id 在数组中，表示这个版本是由还没提交的事务生成的，不可见；
+   b. 若 row trx_id 不在数组中，表示这个版本是已经提交了的事务生成的，可见。
+
+**InnoDB 利用了“所有数据都有多个版本”的这个特性，实现了“秒级创建快照”的能力。**
+
+### 更新逻辑
+
+**更新数据都是先读后写的，而这个读，只能读当前的值，称为“当前读”（current read）。**
+
+下面这两个 select 语句，就是分别加了读锁（S 锁，共享锁）和写锁（X 锁，排他锁）。
+
+```mysql
+mysql> select k from t where id=1 lock in share mode;
+mysql> select k from t where id=1 for update;
+```
+
+**事务的可重复读的能力是怎么实现的？**
+
+可重复读的核心就是一致性读（consistent read）；而事务更新数据的时候，只能用当前读。如果当前的记录的行锁被其他事务占用的话，就需要进入锁等待。
+
+### 小结
+
+InnoDB 的行数据有多个版本，每个数据版本有自己的 row trx_id，每个事务或者语句有自己的一致性视图。普通查询语句是一致性读，一致性读会根据 row trx_id 和一致性视图确定数据版本的可见性。
+
+- 对于可重复读，查询只承认在事务启动前就已经提交完成的数据；
+- 对于读提交，查询只承认在语句启动前就已经提交完成的数据；
+
+思考题
+
+```mysql
+mysql> CREATE TABLE `t` (
+  `id` int(11) NOT NULL,
+  `c` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB;
+insert into t(id, c) values(1,1),(2,2),(3,3),(4,4);
+```
+
