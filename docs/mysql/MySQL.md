@@ -426,3 +426,42 @@ mysql> CREATE TABLE `t` (
 insert into t(id, c) values(1,1),(2,2),(3,3),(4,4);
 ```
 
+## 09 | 普通索引和唯一索引，应该怎么选择？
+
+`select name from CUser where id_card = 'xxxxxxxyyyyyyzzzzz';`
+
+从性能的角度考虑，你选择唯一索引还是普通索引呢？选择的依据是什么呢？
+
+### 查询过程
+
+- 对于普通索引来说，查找到满足条件的第一个记录 (5,500) 后，需要查找下一个记录，直到碰到第一个不满足 k=5 条件的记录。
+- 对于唯一索引来说，由于索引定义了唯一性，查找到第一个满足条件的记录后，就会停止继续检索。
+
+### 更新过程
+
+**如果要在这张表中插入一个新记录 (4,400) 的话，InnoDB 的处理流程是怎样的。**
+
+change buffer 因为减少了随机磁盘访问，所以对更新性能的提升是会很明显的。
+
+### change buffer 的使用场景
+
+change buffer 的大小，可以通过参数 innodb_change_buffer_max_size 来动态设置。这个参数设置为 50 的时候，表示 change buffer 的大小最多只能占用 buffer pool 的 50%。
+
+通过上面的分析，你已经清楚了使用 change buffer 对更新过程的加速作用，也清楚了 change buffer 只限于用在普通索引的场景下，而不适用于唯一索引。那么，现在有一个问题就是：普通索引的所有场景，使用 change buffer 都可以起到加速作用吗？
+
+因此，对于写多读少的业务来说，页面在写完以后马上被访问到的概率比较小，此时 change buffer 的使用效果最好。这种业务模型常见的就是账单类、日志类的系统。
+
+### 索引选择和实践
+
+普通索引和 change buffer 的配合使用，对于数据量大的表的更新优化还是很明显的。
+
+### change buffer 和 redo log
+
+`mysql> insert into t(id,k) values(id1,k1),(id2,k2);`
+
+**redo log 主要节省的是随机写磁盘的 IO 消耗（转成顺序写），而 change buffer 主要节省的则是随机读磁盘的 IO 消耗。**
+
+**思考**
+
+change buffer 一开始是写内存的，那么如果这个时候机器掉电重启，会不会导致 change buffer 丢失呢？change buffer 丢失可不是小事儿，再从磁盘读入数据可就没有了 merge 过程，就等于是数据丢失了。会不会出现这种情况呢？
+
