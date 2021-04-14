@@ -453,6 +453,8 @@ change buffer 的大小，可以通过参数 innodb_change_buffer_max_size 来�
 
 ### 索引选择和实践
 
+<img src="../images/mysql09.png" style="zoom:50%;" />
+
 普通索引和 change buffer 的配合使用，对于数据量大的表的更新优化还是很明显的。
 
 ### change buffer 和 redo log
@@ -465,3 +467,100 @@ change buffer 的大小，可以通过参数 innodb_change_buffer_max_size 来�
 
 change buffer 一开始是写内存的，那么如果这个时候机器掉电重启，会不会导致 change buffer 丢失呢？change buffer 丢失可不是小事儿，再从磁盘读入数据可就没有了 merge 过程，就等于是数据丢失了。会不会出现这种情况呢？
 
+1.change buffer有一部分在内存有一部分在ibdata.
+做purge操作,应该就会把change buffer里相应的数据持久化到ibdata
+2.redo log里记录了数据页的修改以及change buffer新写入的信息
+如果掉电,持久化的change buffer数据已经purge,不用恢复
+
+如果某次写入使用了 change buffer 机制，之后主机异常重启，是否会丢失 change buffer 和数据。
+
+这个问题的答案是不会丢失，虽然是只更新内存，但是在事务提交的时候，我们把 change buffer 的操作也记录到 redo log 里了，所以崩溃恢复的时候，change buffer 也能找回来。
+
+## 10 | MySQL为什么有时候会选错索引？
+
+```mysql
+CREATE TABLE `t` (
+  `id` int(11) NOT NULL,
+  `a` int(11) DEFAULT NULL,
+  `b` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `a` (`a`),
+  KEY `b` (`b`)
+) ENGINE=InnoDB；
+```
+
+相应的存储过程
+
+```mysql
+delimiter ;;
+create procedure idata()
+begin
+  declare i int;
+  set i=1;
+  while(i<=100000)do
+    insert into t values(i, i, i);
+    set i=i+1;
+  end while;
+end;;
+delimiter ;
+call idata();
+```
+
+分析一下这条语句`mysql> explain select * from t where a between 10000 and 20000;`
+
+```mysql
+set long_query_time=0;
+select * from t where a between 10000 and 20000; /*Q1*/
+select * from t force index(a) where a between 10000 and 20000;/*Q2*/
+```
+
+- 第一句，是将慢查询日志的阈值设置为 0，表示这个线程接下来的语句都会被记录入慢查询日志中；
+- 第二句，Q1 是 session B 原来的查询；
+- 第三句，Q2 是加了 force index(a) 来和 session B 原来的查询语句执行情况对比。
+
+结果你会发现，Q2执行为21毫秒，而Q1是40毫秒。
+
+### 优化器的逻辑
+
+选择索引是优化器的工作。
+
+**扫描行数是怎么判断的？**
+
+只能根据统计信息来估算记录数。
+
+**MySQL 是怎样得到索引的基数的呢？**这里，我给你简单介绍一下 MySQL 采样统计的方法。
+
+analyze table t 命令，可以用来重新统计索引信息。
+
+<img src="../images/mysql1001.png" style="zoom:50%;" />
+
+如果只是索引统计不准确，通过 analyze 命令可以解决很多问题，但是前面我们说了，优化器可不止是看扫描行数。
+
+### 索引选择异常和处理
+
+原本可以执行得很快的 SQL 语句，执行速度却比你预期的慢很多，你应该怎么办呢？
+
+**一种方法是，像我们第一个例子一样，采用 force index 强行选择一个索引。**
+
+**第二种方法就是，我们可以考虑修改语句，引导 MySQL 使用我们期望的索引**
+
+`select * from t where (a between 1 and 1000) and (b between 50000 and 100000) order by b limit 1;`
+
+改为`select * from t where (a between 1 and 1000) and (b between 50000 and 100000) order by b,a limit 1;`
+
+### **小结**
+
+对于由于索引统计信息不准确导致的问题，你可以用 analyze table 来解决。
+
+而对于其他优化器误判的情况，你可以在应用端用 force index 来强行指定索引，也可以通过修改语句来引导优化器，还可以通过增加或者删除索引来绕过这个问题。
+
+**思考题**
+
+通过 session A 的配合，让 session B 删除数据后又重新插入了一遍数据，然后就发现 explain 结果中，rows 字段从 10001 变成 37000 多。而如果没有 session A 的配合，只是单独执行 delete from t 、call idata()、explain 这三句话，会看到 rows 字段其实还是 10000 左右。你可以自己验证一下这个结果。
+
+这是什么原因呢？
+
+1.为什么没有session A,session B扫描的行数是1W
+由于mysql是使用标记删除来删除记录的,并不从索引和数据文件中真正的删除。
+如果delete和insert中间的间隔相对较小,purge线程还没有来得及清理该记录。
+如果主键相同的情况下,新插入的insert会沿用之前删除的delete的记录的空间。
