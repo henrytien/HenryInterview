@@ -561,6 +561,100 @@ analyze table t 命令，可以用来重新统计索引信息。
 这是什么原因呢？
 
 1.为什么没有session A,session B扫描的行数是1W
-由于mysql是使用标记删除来删除记录的,并不从索引和数据文件中真正的删除。
-如果delete和insert中间的间隔相对较小,purge线程还没有来得及清理该记录。
-如果主键相同的情况下,新插入的insert会沿用之前删除的delete的记录的空间。
+由于mysql是使用标记删除来删除记录的,并不从索引和数据文件中真正的删除。如果delete和insert中间的间隔相对较小,purge线程还没有来得及清理该记录。如果主键相同的情况下,新插入的insert会沿用之前删除的delete的记录的空间。session A 开启了事务并没有提交，所以之前插入的 10 万行数据是不能删除的。这样，之前的数据每一行数据都有两个版本，旧版本是 delete 之前的数据，新版本是标记为 deleted 的数据。
+
+## 11 | 怎么给字符串字段加索引？
+
+```mysql
+mysql> create table SUser(
+ID bigint unsigned primary key,
+email varchar(64), 
+... 
+)engine=innodb; 
+```
+
+使用邮箱登录
+
+`mysql> select f1, f2 from SUser where email='xxx';`
+
+```mysql
+mysql> alter table SUser add index index1(email);
+或
+mysql> alter table SUser add index index2(email(6));
+```
+
+第一个语句创建的 index1 索引里面，包含了每个记录的整个字符串；而第二个语句创建的 index2 索引里面，对于每个记录都是只取前 6 个字节。
+
+### 前缀索引
+
+**使用前缀索引，定义好长度，就可以做到既节省空间，又不用额外增加太多的查询成本。**
+
+那么问题来了，有什么方法能够确定我应该使用多长的前缀呢？
+
+首先，你可以使用下面这个语句，算出这个列上有多少个不同的值：
+
+```mysql
+mysql> select count(distinct email) as L from SUser;
+```
+
+然后，依次选取不同长度的前缀来看这个值，比如我们要看一下 4~7 个字节的前缀索引，可以用这个语句：
+
+```mysql
+mysql> select 
+  count(distinct left(email,4)）as L4,
+  count(distinct left(email,5)）as L5,
+  count(distinct left(email,6)）as L6,
+  count(distinct left(email,7)）as L7,
+from SUser;
+```
+
+### 前缀索引对覆盖索引的影响
+
+1. 使用前缀索引可能会增加扫描行数，这会影响到性能。
+2. 使用前缀索引就用不上覆盖索引对查询性能的优化了，这也是你在选择是否使用前缀索引时需要考虑的一个因素。
+
+### 其他方式
+
+**第一种方式是使用倒序存储。**如果你存储身份证号的时候把它倒过来存，每次查询的时候，你可以这么写：
+
+```mysql
+mysql> select field_list from t where id_card = reverse('input_id_card_string');
+```
+
+实践中你不要忘记使用 count(distinct) 方法去做个验证。
+
+**第二种方式是使用 hash 字段。**你可以在表上再创建一个整数字段，来保存身份证的校验码，同时在这个字段上创建索引。
+
+```mysql
+mysql> alter table t add id_card_crc int unsigned, add index(id_card_crc);
+```
+
+由于校验码可能存在冲突，也就是说两个不同的身份证号通过 crc32() 函数得到的结果可能是相同的，所以你的查询语句 where 部分要判断 id_card 的值是否精确相同。
+
+```mysql
+mysql> select field_list from t where id_card_crc=crc32('input_id_card_string') and id_card='input_id_card_string'
+```
+
+**使用倒序存储和使用 hash 字段这两种方法的异同点**
+
+相同点是，都不支持范围查询。
+
+区别，主要体现在以下三个方面：
+
+1. 从占用的额外空间来看，倒序存储方式在主键索引上，不会消耗额外的存储空间，而 hash 字段方法需要增加一个字段。当然，倒序存储方式使用 4 个字节的前缀长度应该是不够的，如果再长一点，这个消耗跟额外这个 hash 字段也差不多抵消了。
+2. 在 CPU 消耗方面，倒序方式每次写和读的时候，都需要额外调用一次 reverse 函数，而 hash 字段的方式需要额外调用一次 crc32() 函数。如果只从这两个函数的计算复杂度来看的话，reverse 函数额外消耗的 CPU 资源会更小些。
+3. 从查询效率上看，使用 hash 字段方式的查询性能相对更稳定一些。因为 crc32 算出来的值虽然有冲突的概率，但是概率非常小，可以认为每次查询的平均扫描行数接近 1。而倒序存储方式毕竟还是用的前缀索引的方式，也就是说还是会增加扫描行数。
+
+### 小结
+
+1. 直接创建完整索引，这样可能比较占用空间；
+2. 创建前缀索引，节省空间，但会增加查询扫描次数，并且不能使用覆盖索引；
+3. 倒序存储，再创建前缀索引，用于绕过字符串本身前缀的区分度不够的问题；
+4. 创建 hash 字段索引，查询性能稳定，有额外的存储和计算消耗，跟第三种方式一样，都不支持范围扫描。
+
+**问题**
+
+如果你在维护一个学校的学生信息数据库，学生登录名的统一格式是”学号 @gmail.com", 而学号的规则是：十五位的数字，其中前三位是所在城市编号、第四到第六位是学校编号、第七位到第十位是入学年份、最后五位是顺序编号。
+
+系统登录的时候都需要学生输入登录名和密码，验证正确后才能继续使用系统。就只考虑登录验证这个行为的话，你会怎么设计这个登录名的索引呢？
+
