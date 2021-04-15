@@ -615,7 +615,7 @@ from SUser;
 
 ### 其他方式
 
-**第一种方式是使用倒序存储。**如果你存储身份证号的时候把它倒过来存，每次查询的时候，你可以这么写：
+**第一种方式是使用倒序存储** 如果你存储身份证号的时候把它倒过来存，每次查询的时候，你可以这么写：
 
 ```mysql
 mysql> select field_list from t where id_card = reverse('input_id_card_string');
@@ -623,7 +623,7 @@ mysql> select field_list from t where id_card = reverse('input_id_card_string');
 
 实践中你不要忘记使用 count(distinct) 方法去做个验证。
 
-**第二种方式是使用 hash 字段。**你可以在表上再创建一个整数字段，来保存身份证的校验码，同时在这个字段上创建索引。
+**第二种方式是使用 hash 字段** 你可以在表上再创建一个整数字段，来保存身份证的校验码，同时在这个字段上创建索引。
 
 ```mysql
 mysql> alter table t add id_card_crc int unsigned, add index(id_card_crc);
