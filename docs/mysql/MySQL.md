@@ -672,3 +672,47 @@ mysql> select field_list from t where id_card_crc=crc32('input_id_card_string') 
 
   对应的就是系统内存不足。当需要新的内存页，而内存不够用的时候，就要淘汰一些数据页，空出内存给别的数据页使用。如果淘汰的是“脏页”，就要先将脏页写到磁盘。
 
+### InnoDB 刷脏页的控制策略
+
+innodb_io_capacity 这个参数了，它会告诉 InnoDB 你的磁盘能力。这个值我建议你设置成磁盘的 IOPS。磁盘的 IOPS 可以通过 fio 这个工具来测试，下面的语句是我用来测试磁盘随机读写的命令：
+
+`fio -filename=$filename -direct=1 -iodepth 1 -thread -rw=randrw -ioengine=psync -bs=16k -size=500M -numjobs=10 -runtime=10 -group_reporting -name=mytest `
+
+**如果你来设计策略控制刷脏页的速度，会参考哪些因素呢？**
+
+InnoDB 的刷盘速度就是要参考这两个因素：一个是脏页比例，一个是 redo log 写盘速度。
+
+```mysql
+F1(M)
+{
+  if M>=innodb_max_dirty_pages_pct then
+      return 100;
+  return 100*M/innodb_max_dirty_pages_pct;
+}
+```
+
+无论是你的查询语句在需要内存的时候可能要求淘汰一个脏页，还是由于刷脏页的逻辑会占用 IO 资源并可能影响到了你的更新语句，都可能是造成你从业务端感知到 MySQL“抖”了一下的原因。
+
+```mysql
+mysql> select VARIABLE_VALUE into @a from global_status where VARIABLE_NAME = 'Innodb_buffer_pool_pages_dirty';
+select VARIABLE_VALUE into @b from global_status where VARIABLE_NAME = 'Innodb_buffer_pool_pages_total';
+select @a/@b;
+```
+
+### **小结**
+
+利用 WAL 技术，数据库将随机写转换成了顺序写，大大提升了数据库的性能。
+
+**思考题**：
+
+一个内存配置为 128GB、innodb_io_capacity 设置为 20000 的大规格实例，正常会建议你将 redo log 设置成 4 个 1GB 的文件。
+
+但如果你在配置的时候不慎将 redo log 设置成了 1 个 100M 的文件，会发生什么情况呢？又为什么会出现这样的情况呢？
+
+redo log是关系型数据库的核心啊,保证了ACID里的D。所以redo log是牵一发而动全身的操作，按照老师说的当内存数据页跟磁盘数据页不一致的时候,把内存页称为'脏页'。如果redo log设置得太小,redo log写满.那么会涉及到哪些操作呢,我认为是以下几点:
+
+1. 把相对应的数据页中的脏页持久化到磁盘,checkpoint往前推
+2. 由于redo log还记录了undo的变化,undo log buffer也要持久化进undo log
+
+
+
