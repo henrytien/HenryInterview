@@ -781,9 +781,6 @@ InnoDB 是索引组织表，主键索引树的叶子节点是数据，而普通�
 
 <img src="../images/mysql1401.png" alt="图片2" style="zoom:50%;"  />
 
-<center style="font-size:14px;color:#C0C0C0;">图 1 会话 A、B 的执行时序图
-</center> 
-
 虽然会话 B 的读操作仍然是在 T3 执行的，但是因为这时候更新事务还没有提交，所以计数值加 1 这个操作对会话 B 还不可见。
 
 ### 不同的 count 用法
