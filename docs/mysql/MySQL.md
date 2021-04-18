@@ -944,7 +944,7 @@ commit;
 
 不知道你会不会吐槽：之前明明还说尽量不要使用唯一索引，结果这个例子一上来我就创建了两个。这里我要再和你说明一下，之前文章我们讨论的，是在“业务开发保证不会插入重复记录”的情况下，着重要解决性能问题的时候，才建议尽量使用普通索引。
 
-
+**思考**
 
 ```mysql
 mysql> CREATE TABLE `t` (
@@ -970,7 +970,9 @@ mysql> update t set a=2 where id=1;
 
 你觉得实际情况会是以上哪种呢？你可否用构造实验的方式，来证明你的结论？进一步地，可以思考一下，MySQL 为什么要选择这种策略呢？
 
+然后你会说，MySQL 怎么这么笨，就不会更新前判断一下值是不是相同吗？如果判断一下，不就不用浪费 InnoDB 操作，多去更新一次了？
 
+其实 MySQL 是确认了的。只是在这个语句里面，MySQL 认为读出来的值，只有一个确定的 (id=1), 而要写的是 (a=3)，只从这两个信息是看不出来“不需要修改”的。
 
 **思考**
 
@@ -1020,7 +1022,7 @@ CREATE TABLE `t` (
 
 这个语句看上去逻辑很清晰，但是你了解它的执行流程吗？
 
-## 全字段排序
+### 全字段排序
 
 前面我们介绍过索引，所以你现在就很清楚了，为避免全表扫描，我们需要在 city 字段加上索引。
 
@@ -1029,4 +1031,72 @@ CREATE TABLE `t` (
 ![](../images/mysql1601.png)
 
 <center><span class="reference">图 1 使用 explain 命令查看语句的执行情况</span></center>
+
+你可以用下面介绍的方法，来确定一个排序语句是否使用了临时文件。
+
+```mysql
+/* 打开 optimizer_trace，只对本线程有效 */
+SET optimizer_trace='enabled=on'; 
+ 
+/* @a 保存 Innodb_rows_read 的初始值 */
+select VARIABLE_VALUE into @a from  performance_schema.session_status where variable_name = 'Innodb_rows_read';
+ 
+/* 执行语句 */
+select city, name,age from t where city='杭州' order by name limit 1000; 
+ 
+/* 查看 OPTIMIZER_TRACE 输出 */
+SELECT * FROM `information_schema`.`OPTIMIZER_TRACE`\G
+ 
+/* @b 保存 Innodb_rows_read 的当前值 */
+select VARIABLE_VALUE into @b from performance_schema.session_status where variable_name = 'Innodb_rows_read';
+ 
+/* 计算 Innodb_rows_read 差值 */
+select @b-@a;
+```
+
+### rowid 排序
+
+**如果 MySQL 认为排序的单行长度太大会怎么做呢？**
+
+接下来，我来修改一个参数，让 MySQL 采用另外一种算法。
+
+```mysql
+SET max_length_for_sort_data = 16;
+```
+
+max_length_for_sort_data，是 MySQL 中专门控制用于排序的行数据的长度的一个参数。
+
+### 全字段排序 VS rowid 排序
+
+MySQL 的一个设计思想：**如果内存够，就要多利用内存，尽量减少磁盘访问。**
+
+并不是所有的 order by 语句，都需要排序操作的。从上面分析的执行过程，我们可以看到，MySQL 之所以需要生成临时表，并且在临时表上做排序操作，**其原因是原来的数据都是无序的。**
+
+所以，我们可以在这个市民表上创建一个 city 和 name 的联合索引，对应的 SQL 语句是：
+
+`alter table t add index city_user(city, name);`
+
+**覆盖索引是指，索引上的信息足够满足查询请求，不需要再回到主键索引上去取数据。**
+
+### 小结
+
+今天这篇文章，我和你介绍了 MySQL 里面 order by 语句的几种算法流程。
+
+在开发系统的时候，你总是不可避免地会使用到 order by 语句。你心里要清楚每个语句的排序逻辑是怎么实现的，还要能够分析出在最坏情况下，每个语句的执行对系统资源的消耗，这样才能做到下笔如有神，不犯低级错误。
+
+**思考**
+
+假设你的表里面已经有了 city_name(city, name) 这个联合索引，然后你要查杭州和苏州两个城市中所有的市民的姓名，并且按名字排序，显示前 100 条记录。如果 SQL 查询语句是这么写的 ：
+
+```mysql
+mysql> select * from t where city in ('杭州'," 苏州 ") order by name limit 100;
+```
+
+那么，这个语句执行的时候会有排序过程吗，为什么？
+
+如果业务端代码由你来开发，需要实现一个在数据库端不需要排序的方案，你会怎么实现呢？
+
+进一步地，如果有分页需求，要显示第 101 页，也就是说语句最后要改成 “limit 10000,100”， 你的实现方法又会是什么呢？
+
+
 
