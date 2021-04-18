@@ -1002,3 +1002,31 @@ mysql> update t set a=2 where id=1;
 >
 > 一起加油吧🤝
 
+## 16 | “order by”是怎么工作的？
+
+```mysql
+CREATE TABLE `t` (
+  `id` int(11) NOT NULL,
+  `city` varchar(16) NOT NULL,
+  `name` varchar(16) NOT NULL,
+  `age` int(11) NOT NULL,
+  `addr` varchar(128) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `city` (`city`)
+) ENGINE=InnoDB;
+```
+
+``select city,name,age from t where city='杭州' order by name limit 1000  ;``
+
+这个语句看上去逻辑很清晰，但是你了解它的执行流程吗？
+
+## 全字段排序
+
+前面我们介绍过索引，所以你现在就很清楚了，为避免全表扫描，我们需要在 city 字段加上索引。
+
+在 city 字段上创建索引之后，我们用 explain 命令来看看这个语句的执行情况。
+
+<img data-savepage-src="https://static001.geekbang.org/resource/image/82/03/826579b63225def812330ef6c344a303.png">
+
+<center><span class="reference">图 1 使用 explain 命令查看语句的执行情况</span></center>
+
