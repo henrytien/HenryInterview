@@ -284,7 +284,7 @@ select * from geek where c=N order by b limit 1;
 
 也就是说，不加锁的话，备份系统备份的得到的库不是一个逻辑时间点，这个视图是逻辑不一致的。
 
-**single-transaction 方法只适用于所有的表使用事务引擎的库。**如果有的表使用了不支持事务的引擎，那么备份就只能通过 FTWRL 方法。
+**single-transaction** 方法只适用于所有的表使用事务引擎的库。**如果有的表使用了不支持事务的引擎，那么备份就只能通过 FTWRL 方法。
 
 **为什么不使用 set global readonly=true 的方式呢**？
 
