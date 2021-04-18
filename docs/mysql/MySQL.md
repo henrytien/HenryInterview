@@ -1026,7 +1026,7 @@ CREATE TABLE `t` (
 
 在 city 字段上创建索引之后，我们用 explain 命令来看看这个语句的执行情况。
 
-<img data-savepage-src="https://static001.geekbang.org/resource/image/82/03/826579b63225def812330ef6c344a303.png">
+![](../images/mysql1601.png)
 
 <center><span class="reference">图 1 使用 explain 命令查看语句的执行情况</span></center>
 
