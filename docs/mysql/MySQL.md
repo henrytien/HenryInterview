@@ -528,7 +528,7 @@ select * from t force index(a) where a between 10000 and 20000;/*Q2*/
 
 只能根据统计信息来估算记录数。
 
-**MySQL 是怎样得到索引的基数的呢？**这里，我给你简单介绍一下 MySQL 采样统计的方法。
+**MySQL 是怎样得到索引的基数的呢?**这里，我给你简单介绍一下 MySQL 采样统计的方法。
 
 analyze table t 命令，可以用来重新统计索引信息。
 
