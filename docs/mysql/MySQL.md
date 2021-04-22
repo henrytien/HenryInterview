@@ -1195,3 +1195,38 @@ select “10” > 9 返回的是 1，所以你就能确认 MySQL 里的转换规
 **思考**
 
 你遇到过别的、类似上面提到的性能问题吗？你认为原因是什么，又是怎么解决的呢？
+
+## 19 | 为什么我只查一行的语句，也执行这么慢？
+
+```mysql
+mysql> CREATE TABLE `t` (
+  `id` int(11) NOT NULL,
+  `c` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB;
+ 
+delimiter ;;
+create procedure idata()
+begin
+  declare i int;
+  set i=1;
+  while(i<=100000)do
+    insert into t values(i,i);
+    set i=i+1;
+  end while;
+end;;
+delimiter ;
+ 
+call idata();
+```
+
+### 第一类：查询长时间不返回
+
+大概率是表 t 被锁住了。接下来分析原因的时候，一般都是首先执行一下 show processlist 命令，看看当前语句处于什么状态。
+
+
+
+### 小结
+
+今天我给你举了在一个简单的表上，执行“查一行”，可能会出现的被锁住和执行慢的例子。这其中涉及到了表锁、行锁和一致性读的概念。
+
