@@ -1224,9 +1224,41 @@ call idata();
 
 大概率是表 t 被锁住了。接下来分析原因的时候，一般都是首先执行一下 show processlist 命令，看看当前语句处于什么状态。
 
+### 等 MDL 锁
 
+通过查询 sys.schema_table_lock_waits 这张表，我们就可以直接找出造成阻塞的 process id，把这个连接用 kill 命令断开即可。
+
+### 等 flush
+
+出现 Waiting for table flush 状态的可能情况是：有一个 flush tables 命令被别的语句堵住了，然后它又堵住了我们的 select 语句。
+
+### 等行锁
+
+查询方法是：
+
+```mysql
+mysql> select * from t sys.innodb_lock_waits where locked_table=`'test'.'t'`\G
+```
+
+### 第二类：查询慢
+
+ set long_query_time=0，将慢查询日志的时间阈值设置为 0
+
+带 lock in share mode 的 SQL 语句，是当前读，因此会直接读到 1000001 这个结果，所以速度很快；而 select * from t where id=1 这个语句，是一致性读，因此需要从 1000001 开始，依次执行 undo log，执行了 100 万次以后，才将 1 这个结果返回。
 
 ### 小结
 
 今天我给你举了在一个简单的表上，执行“查一行”，可能会出现的被锁住和执行慢的例子。这其中涉及到了表锁、行锁和一致性读的概念。
+
+**思考**
+
+```mysql
+begin;
+select * from t where c=5 for update;
+commit;
+```
+
+这个语句序列是怎么加锁的呢？加的锁又是什么时候释放呢？
+
+select语句一直处于killed状态的情况？
 
