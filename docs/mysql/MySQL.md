@@ -1529,5 +1529,87 @@ write 和 fsync 的时机，是由参数 sync_binlog 控制的：
 
 **思考题**是：你的生产库设置的是“双 1”吗？ 如果平时是的话，你有在什么场景下改成过“非双 1”吗？你的这个操作又是基于什么决定的？
 
+## 24 | MySQL是怎么保证主备一致的？
+
+大家知道 binlog 可以用来归档，也可以用来做主备同步，但它的内容是什么样的呢？为什么备库执行了 binlog 就可以跟主库保持一致了呢？
+
+### MySQL 主备的基本原理
+
+<img src="../images/mysql2401.png" style="zoom:50%;" />
+
+建议你把节点 B（也就是备库）设置成只读（readonly）模式。这样做，有以下几个考虑：
+
+1. 有时候一些运营类的查询语句会被放到备库上去查，设置为只读可以防止误操作；
+2. 防止切换逻辑有 bug，比如切换过程中出现双写，造成主备不一致；
+3. 可以用 readonly 状态，来判断节点的角色。
+
+因为 readonly 设置对超级 (super) 权限用户是无效的，而用于同步更新的线程，就拥有超级权限。
+
+**节点 A 到 B 这条线的内部流程是什么样的**
+
+<img src="../images/mysql2402.png" style="zoom:50%;" />
+
+一个事务日志同步的完整过程是这样的：
+
+1. 在备库 B 上通过 change master 命令，设置主库 A 的 IP、端口、用户名、密码，以及要从哪个位置开始请求 binlog，这个位置包含文件名和日志偏移量。
+2. 在备库 B 上执行 start slave 命令，这时候备库会启动两个线程，就是图中的 io_thread 和 sql_thread。其中 io_thread 负责与主库建立连接。
+3. 主库 A 校验完用户名、密码后，开始按照备库 B 传过来的位置，从本地读取 binlog，发给 B。
+4. 备库 B 拿到 binlog 后，写到本地文件，称为中转日志（relay log）。
+5. sql_thread 读取中转日志，解析出日志里的命令，并执行。
+
+sql_thread 演化成为了多个线程
+
+### binlog 的三种格式对比
+
+```mysql
+mysql> CREATE TABLE `t` (
+  `id` int(11) NOT NULL,
+  `a` int(11) DEFAULT NULL,
+  `t_modified` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `a` (`a`),
+  KEY `t_modified`(`t_modified`)
+) ENGINE=InnoDB;
+ 
+insert into t values(1,1,'2018-11-13');
+insert into t values(2,2,'2018-11-12');
+insert into t values(3,3,'2018-11-11');
+insert into t values(4,4,'2018-11-10');
+insert into t values(5,5,'2018-11-09');
+```
+
+如果你用 MySQL 客户端来做这个实验的话，要记得加 -c 参数，否则客户端会自动去掉注释。
+
+```mysql
+mysql> delete from t /*comment*/  where a>=4 and t_modified<='2018-11-10' limit 1;
+```
+
+当 binlog_format=statement 时，binlog 里面记录的就是 SQL 语句的原文。你可以用
+
+```mysql
+mysql> show binlog events in 'master.000001';
+```
+
+命令看 binlog 中的内容。
+
+由于 statement 格式下，记录到 binlog 里的是语句原文，因此可能会出现这样一种情况：在主库执行这条 SQL 语句的时候，用的是索引 a；而在备库执行这条 SQL 语句的时候，却使用了索引 t_modified。因此，MySQL 认为这样写是有风险的。
+
+如果我把 binlog 的格式改为 binlog_format=‘row’， 是不是就没有这个问题了呢？
+
+这个事务的 binlog 是从 8900 这个位置开始的，所以可以用 start-position 参数来指定从这个位置的日志开始解析。
+
+```mysql
+mysqlbinlog  -vv data/master.000001 --start-position=8900;
+```
+
+当 binlog_format 使用 row 格式的时候，binlog 里面记录了真实删除行的主键 id，这样 binlog 传到备库去的时候，就肯定会删除 id=4 的行，不会有主备删除不同行的问题。
+
+### 为什么会有 mixed 格式的 binlog？
 
 
+
+**思考题**
+
+说到循环复制问题的时候，我们说 MySQL 通过判断 server id 的方式，断掉死循环。但是，这个机制其实并不完备，在某些场景下，还是有可能出现死循环。
+
+你能构造出一个这样的场景吗？又应该怎么解决呢？
