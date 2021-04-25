@@ -1605,6 +1605,20 @@ mysqlbinlog  -vv data/master.000001 --start-position=8900;
 
 ### 为什么会有 mixed 格式的 binlog？
 
+- 因为有些 statement 格式的 binlog 可能会导致主备不一致，所以要使用 row 格式。
+- 但 row 格式的缺点是，很占空间。比如你用一个 delete 语句删掉 10 万行数据，用 statement 的话就是一个 SQL 语句被记录到 binlog 中，占用几十个字节的空间。但如果用 row 格式的 binlog，就要把这 10 万条记录都写到 binlog 中。这样做，不仅会占用更大的空间，同时写 binlog 也要耗费 IO 资源，影响执行速度。
+- 所以，MySQL 就取了个折中方案，也就是有了 mixed 格式的 binlog。mixed 格式的意思是，MySQL 自己会判断这条 SQL 语句是否可能引起主备不一致，如果有可能，就用 row 格式，否则就用 statement 格式。
+
+也就是说，mixed 格式可以利用 statment 格式的优点，同时又避免了数据不一致的风险。
+
+现在越来越多的场景要求把 MySQL 的 binlog 格式设置成 row。这么做的理由有很多，我来给你举一个可以直接看出来的好处：**恢复数据**。
+
+```mysql
+mysql> insert into t values(10,10, now());
+```
+
+如果我们把 binlog 格式设置为 mixed，你觉得 MySQL 会把它记录为 row 格式还是 statement 格式呢？
+
 
 
 **思考题**
