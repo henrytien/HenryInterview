@@ -1845,7 +1845,7 @@ set global sql_slave_skip_counter=1;
 start slave;
 ```
 
-**另外一种方式是，**通过设置 slave_skip_errors 参数，直接设置跳过指定的错误。
+**另外一种方式是，** 通过设置 slave_skip_errors 参数，直接设置跳过指定的错误。
 
 我们可以把 slave_skip_errors 设置为 “1032,1062”，这样中间碰到这两个错误时就直接跳过。
 
