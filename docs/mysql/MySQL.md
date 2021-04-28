@@ -1818,3 +1818,34 @@ select * from t limit 1;
 
 ## 27 | 主库出问题了，从库怎么办？
 
+先聊聊一主多从的切换正确性。然后，我们在下一篇文章中再聊聊解决一主多从的查询逻辑正确性的方法。
+
+<img src="../images/mysql2701.png" style="zoom:50%;" />
+
+### 基于位点的主备切换
+
+把节点 B 设置成节点 A’的从库的时候，需要执行一条 change master 命令：
+
+```mysql
+CHANGE MASTER TO 
+MASTER_HOST=$host_name 
+MASTER_PORT=$port 
+MASTER_USER=$user_name 
+MASTER_PASSWORD=$password 
+MASTER_LOG_FILE=$master_log_name 
+MASTER_LOG_POS=$master_log_pos  
+```
+
+所以，**通常情况下，我们在切换任务的时候，要先主动跳过这些错误，有两种常用的方法。**
+
+**一种做法是**，主动跳过一个事务。跳过命令的写法是：
+
+```mysql
+set global sql_slave_skip_counter=1;
+start slave;
+```
+
+**另外一种方式是，**通过设置 slave_skip_errors 参数，直接设置跳过指定的错误。
+
+我们可以把 slave_skip_errors 设置为 “1032,1062”，这样中间碰到这两个错误时就直接跳过。
+
