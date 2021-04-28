@@ -1816,3 +1816,5 @@ select * from t limit 1;
 
 > 关键点在于主库单线程，针对三种不同的策略，COMMIT_ORDER：没有同时到达redo log的prepare 状态的事务，备库退化为单线程；WRITESET：通过对比更新的事务是否存在冲突的行，可以并发执行；WRITE_SESSION：在WRITESET的基础上增加了线程的约束，则退化为单线程。综上，应选择WRITESET策略。
 
+## 27 | 主库出问题了，从库怎么办？
+
