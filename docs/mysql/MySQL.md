@@ -1816,6 +1816,12 @@ select * from t limit 1;
 
 > 关键点在于主库单线程，针对三种不同的策略，COMMIT_ORDER：没有同时到达redo log的prepare 状态的事务，备库退化为单线程；WRITESET：通过对比更新的事务是否存在冲突的行，可以并发执行；WRITE_SESSION：在WRITESET的基础上增加了线程的约束，则退化为单线程。综上，应选择WRITESET策略。
 
+如果主库都是单线程压力模式，在从库追主库的过程中，binlog-transaction-dependency-tracking 应该选用什么参数？
+
+这个问题的答案是，应该将这个参数设置为 WRITESET。
+
+
+
 ## 27 | 主库出问题了，从库怎么办？
 
 先聊聊一主多从的切换正确性。然后，我们在下一篇文章中再聊聊解决一主多从的查询逻辑正确性的方法。
@@ -1849,3 +1855,51 @@ start slave;
 
 我们可以把 slave_skip_errors 设置为 “1032,1062”，这样中间碰到这两个错误时就直接跳过。
 
+### GTID
+
+GTID 的全称是 Global Transaction Identifier，也就是全局事务 ID，是一个事务在提交的时候生成的，是这个事务的唯一标识。
+
+`GTID=server_uuid:gno`
+
+- server_uuid 是一个实例第一次启动时自动生成的，是一个全局唯一的值；
+- gno 是一个整数，初始值是 1，每次提交事务的时候分配给这个事务，并加 1。
+
+GTID 模式的启动也很简单，我们只需要在启动一个 MySQL 实例的时候，加上参数 gtid_mode=on 和 enforce_gtid_consistency=on 就可以了。
+
+### 基于 GTID 的主备切换
+
+我们在实例 B 上执行 start slave 命令，取 binlog 的逻辑是这样的：
+
+1. 实例 B 指定主库 A’，基于主备协议建立连接。
+2. 实例 B 把 set_b 发给主库 A’。
+3. 实例 A’算出 set_a 与 set_b 的差集，也就是所有存在于 set_a，但是不存在于 set_b 的 GTID 的集合，判断 A’本地是否包含了这个差集需要的所有 binlog 事务。
+   a. 如果不包含，表示 A’已经把实例 B 需要的 binlog 给删掉了，直接返回错误；
+   b. 如果确认全部包含，A’从自己的 binlog 文件里面，找出第一个不在 set_b 的事务，发给 B；
+4. 之后就从这个事务开始，往后读文件，按顺序取 binlog 发给 B 去执行。
+
+### GTID 和在线 DDL
+
+- 在实例 X 上执行 stop slave。
+- 在实例 Y 上执行 DDL 语句。注意，这里并不需要关闭 binlog。
+- 执行完成后，查出这个 DDL 语句对应的 GTID，并记为 server_uuid_of_Y:gno。
+- 到实例 X 上执行以下语句序列：
+
+```mysql
+set GTID_NEXT="server_uuid_of_Y:gno";
+begin;
+commit;
+set gtid_next=automatic;
+start slave;
+```
+
+**小结**
+
+如果你使用的 MySQL 版本支持 GTID 的话，我都建议你尽量使用 GTID 模式来做一主多从的切换。
+
+**思考**
+
+你在 GTID 模式下设置主从关系的时候，从库执行 start slave 命令后，主库发现需要的 binlog 已经被删除掉了，导致主备创建不成功。这种情况下，你觉得可以怎么处理呢？
+
+GTID主从同步设置时，主库A发现需同步的GTID日志有删掉的，那么A就会报错。
+解决办法：
+从库B在启动同步前需要设置 gtid_purged，指定GTID同步的起点，使用备份搭建从库时需要这样设置。
