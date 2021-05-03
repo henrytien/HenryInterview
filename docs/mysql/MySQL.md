@@ -2805,3 +2805,90 @@ alter table t1 add index a_btree_index using btree (id);
 假设你刚刚接手的一个数据库上，真的发现了一个内存表。备库重启之后肯定是会导致备库的内存表数据被清空，进而导致主备同步停止。这时，最好的做法是将它修改成 InnoDB 引擎表。
 
 假设当时的业务场景暂时不允许你修改引擎，你可以加上什么自动化逻辑，来避免主备同步停止呢？
+
+我们假设的是主库暂时不能修改引擎，那么就把备库的内存表引擎先都改成 InnoDB。对于每个内存表，执行
+
+```mysql
+set sql_log_bin=off;
+alter table tbl_name engine=innodb;
+```
+
+这样就能避免备库重启的时候，数据丢失的问题。
+
+## 39 | 自增主键为什么不是连续的？
+
+由于自增主键可以让主键索引尽量地保持递增顺序插入，避免了页分裂，因此索引更紧凑。
+
+什么情况下自增主键会出现 “空洞”？
+
+我们创建一个表 t，其中 id 是自增主键字段、c 是唯一索引。
+
+```mysql
+CREATE TABLE `t` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `c` int(11) DEFAULT NULL,
+  `d` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `c` (`c`)
+) ENGINE=InnoDB;
+```
+
+### 自增值保存在哪儿？
+
+- 在 MySQL 8.0 版本，将自增值的变更记录在了 redo log 中，重启的时候依靠 redo log 恢复重启之前的值。
+
+### 自增值修改机制
+
+1. 如果插入数据时 id 字段指定为 0、null 或未指定值，那么就把这个表当前的 AUTO_INCREMENT 值填到自增字段；
+2. 如果插入数据时 id 字段指定了具体的值，就直接使用语句里指定的值。
+
+**新的自增值生成算法是**：从 auto_increment_offset 开始，以 auto_increment_increment 为步长，持续叠加，直到找到第一个大于 X 的值，作为新的自增值。
+
+其中，auto_increment_offset 和 auto_increment_increment 是两个系统参数，分别用来表示自增的初始值和步长，默认值都是 1。
+
+> 备注：在一些场景下，使用的就不全是默认值。比如，双 M 的主备结构里要求双写的时候，我们就可能会设置成 auto_increment_increment=2，让一个库的自增 id 都是奇数，另一个库的自增 id 都是偶数，避免两个库生成的主键发生冲突。
+
+### 自增值的修改时机
+
+**唯一键冲突是导致自增主键 id 不连续的第一种原因。**
+
+同样地，事务**回滚也会产生类似的现象，这就是第二种原因。**
+
+下面这个语句序列就可以构造不连续的自增 id，你可以自己验证一下。
+
+```mysql
+insert into t values(null,1,1);
+begin;
+insert into t values(null,2,2);
+rollback;
+insert into t values(null,2,2);
+// 插入的行是 (3,2,2)
+```
+
+看看**自增值为什么不能回退。**
+
+InnoDB 放弃了这个设计，语句执行失败也不回退自增 id。也正是因为这样，所以才只保证了自增 id 是递增的，但不保证是连续的。
+
+### 自增锁的优化
+
+**在生产上，尤其是有 insert … select 这种批量插入数据的场景时，从并发插入数据性能的角度考虑，我建议你这样设置：innodb_autoinc_lock_mode=2 ，并且 binlog_format=row**. 这样做，既能提升并发性，又不会出现数据一致性问题。
+
+需要注意的是，我这里说的**批量插入数据，包含的语句类型是 insert … select、replace … select 和 load data 语句。**
+
+对于批量插入数据的语句，MySQL 有一个批量申请自增 id 的策略：
+
+1. 语句执行过程中，第一次申请自增 id，会分配 1 个；
+2. 1 个用完以后，这个语句第二次申请自增 id，会分配 2 个；
+3. 2 个用完以后，还是这个语句，第三次申请自增 id，会分配 4 个；
+4. 依此类推，同一个语句去申请自增 id，每次申请到的自增 id 个数都是上一次的两倍。
+
+**这是主键 id 出现自增 id 不连续的第三种原因。**
+
+**问题**
+
+在最后一个例子中，执行 insert into t2(c,d) select c,d from t; 这个语句的时候，如果隔离级别是可重复读（repeatable read），binlog_format=statement。这个语句会对表 t 的所有记录和间隙加锁。
+
+你觉得为什么需要这么做呢？
+
+> 在8.0.3版本后，innodb_autoinc_lock_mode默认值已是2，在binlog_format默认值为row的前提下，想来也是为了增加并发。
+
