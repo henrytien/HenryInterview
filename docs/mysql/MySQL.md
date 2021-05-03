@@ -2560,6 +2560,86 @@ select * from t1 join temp_t on (t1.b=temp_t.b);
 2. BNL 算法效率低，建议你都尽量转成 BKA 算法。优化的方向就是给被驱动表的关联字段加上索引；
 3. 基于临时表的改进方案，对于能够提前过滤出小数据的 join 语句来说，效果还是很好的；
 4. MySQL 目前的版本还不支持 hash join，但你可以配合应用端自己模拟出来，理论上效果要好于临时表的方案。
+5. 整体的思路就是，尽量让每一次参与 join 的驱动表的数据集，越小越好，因为这样我们的驱动表就会越小
 
+## 36 | 为什么临时表可以重名？
 
+```mysql
+create temporary table temp_t like t1;
+alter table temp_t add index(b);
+insert into temp_t select * from t2 where b>=1 and b<=2000;
+select * from t1 join temp_t on (t1.b=temp_t.b);
+```
+
+你可能会有疑问，为什么要用临时表呢？直接用普通表是不是也可以呢？
+
+今天我们就从这个问题说起：临时表有哪些特征，为什么它适合这个场景？
+
+- 内存表，指的是使用 Memory 引擎的表，建表语法是 create table … engine=memory。这种表的数据都保存在内存里，系统重启的时候会被清空，但是表结构还在。除了这两个特性看上去比较“奇怪”外，从其他的特征上看，它就是一个正常的表。
+- 而临时表，可以使用各种引擎类型 。如果是使用 InnoDB 引擎或者 MyISAM 引擎的临时表，写数据的时候是写到磁盘上的。当然，临时表也可以使用 Memory 引擎。
+
+临时表在使用上有以下几个特点：
+
+1. 建表语法是 create temporary table …。
+2. 一个临时表只能被创建它的 session 访问，对其他线程不可见。所以，图中 session A 创建的临时表 t，对于 session B 就是不可见的。
+3. 临时表可以与普通表同名。
+4. session A 内有同名的临时表和普通表的时候，show create 语句，以及增删改查语句访问的是临时表。
+5. show tables 命令不显示临时表。
+
+### 临时表的应用
+
+分库分表系统的跨库查询就是一个典型的使用场景。
+
+**另一种思路就是，**把各个分库拿到的数据，汇总到一个 MySQL 实例的一个表中，然后在这个汇总实例上做逻辑操作。
+
+执行流程可以类似这样：
+
+- 在汇总库上创建一个临时表 temp_ht，表里包含三个字段 v、k、t_modified；
+- 在各个分库上执行
+
+```mysql
+select v,k,t_modified from ht_x where k >= M order by t_modified desc limit 100;
+```
+
+- 把分库执行的结果插入到 temp_ht 表中；
+- 执行
+
+```mysql
+select v from temp_ht order by t_modified desc limit 100; 
+```
+
+### 为什么临时表可以重名？
+
+你可能会问，不同线程可以创建同名的临时表，这是怎么做到的呢？
+
+```mysql
+create temporary table temp_t(id int primary key)engine=innodb;
+```
+
+这个语句的时候，MySQL 要给这个 InnoDB 表创建一个 frm 文件保存表结构定义，还要有地方保存表数据。
+
+**这个 frm 文件放在临时文件目录下，文件名的后缀是.frm，前缀是“#sql{进程 id}_{线程 id}_ 序列号”**。你可以使用 select @@tmpdir 命令，来显示实例的临时文件目录。
+
+MySQL 维护数据表，除了物理上要有文件外，内存里面也有一套机制区别不同的表，每个表都对应一个 table_def_key。
+
+- 一个普通表的 table_def_key 的值是由“库名 + 表名”得到的，所以如果你要在同一个库下创建两个同名的普通表，创建第二个表的过程中就会发现 table_def_key 已经存在了。
+- 而对于临时表，table_def_key 在“库名 + 表名”基础上，又加入了“server_id+thread_id”。
+
+也就是说，session A 和 sessionB 创建的两个临时表 t1，它们的 table_def_key 不同，磁盘文件名也不同，因此可以并存。
+
+### 临时表和主备复制
+
+说到主备复制，**还有另外一个问题需要解决**：主库上不同的线程创建同名的临时表是没关系的，但是传到备库执行是怎么处理的呢？
+
+MySQL 在记录 binlog 的时候，会把主库执行这个语句的线程 id 写到 binlog 中。这样，在备库的应用线程就能够知道执行每个语句的主库线程 id，并利用这个线程 id 来构造临时表的 table_def_key
+
+### **小结**
+
+在实际应用中，临时表一般用于处理比较复杂的计算逻辑。由于临时表是每个线程自己可见的，所以不需要考虑多个线程执行同一个处理逻辑时，临时表的重名问题。在线程退出的时候，临时表也能自动删除，省去了收尾和异常处理的工作。
+
+在 binlog_format='row’的时候，临时表的操作不记录到 binlog 中，也省去了不少麻烦，这也可以成为你选择 binlog_format 时的一个考虑因素。
+
+**问题**
+
+我们可以使用 alter table 语法修改临时表的表名，而不能使用 rename 语法。你知道这是什么原因吗？
 
