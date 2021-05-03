@@ -2,6 +2,14 @@
 
 ![基础大纲](../images/mysql01.jpg)
 
+
+
+
+
+[TOC]
+
+
+
 ## 01 | 基础架构：一条SQL查询语句是如何执行的？
 
 ![](../images/mysql的逻辑图.png)
