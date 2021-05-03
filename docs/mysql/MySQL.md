@@ -3198,3 +3198,50 @@ distinct 和group by这两条语句的语义和执行流程是相同的，因此
 ### **小结**
 
 今天这篇答疑文章，我选了4个好问题和你分享，并做了分析。在我看来，能够提出好问题，首先表示这些同学理解了我们文章的内容，进而又做了深入思考。有你们在认真的阅读和思考，对我来说是鼓励，也是动力。
+
+## 45 | 自增id用完怎么办？
+
+### 表定义自增值 id
+
+```mysql
+create table t(id int unsigned auto_increment primary key) auto_increment=4294967295;
+insert into t values(null);
+// 成功插入一行 4294967295
+show create table t;
+/* CREATE TABLE `t` (
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=4294967295;
+*/
+ 
+insert into t values(null);
+//Duplicate entry '4294967295' for key 'PRIMARY'
+```
+
+### InnoDB 系统自增 row_id
+
+1. row_id 写入表中的值范围，是从 0 到 248-1；
+2. 当 dict_sys.row_id=248时，如果再有插入数据的行为要来申请 row_id，拿到以后再取最后 6 个字节的话就是 0。
+
+也就是说，写入表的 row_id 是从 0 开始到 248-1。达到上限后，下一个值就是 0，然后继续循环。
+
+### Xid
+
+MySQL 内部维护了一个全局变量 global_query_id，每次执行语句的时候将它赋值给 Query_id，然后给这个变量加 1。如果当前语句是这个事务执行的第一条语句，那么 MySQL 还会同时把 Query_id 赋值给这个事务的 Xid
+
+因为 global_query_id 定义的长度是 8 个字节，这个自增值的上限是 264-1。
+
+### thread_id
+
+接下来，我们再看看线程 id（thread_id）。其实，线程 id 才是 MySQL 中最常见的一种自增 id。平时我们在查各种现场的时候，show processlist 里面的第一列，就是 thread_id。
+
+thread_id_counter 定义的大小是 4 个字节，因此达到 232-1 后，它就会重置为 0，然后继续增加。但是，你不会在 show processlist 里看到两个相同的 thread_id。
+
+这，是因为 MySQL 设计了一个唯一数组的逻辑，给新线程分配 thread_id 的时候，逻辑代码是这样的：
+
+```mysql
+do {
+  new_id= thread_id_counter++;
+} while (!thread_ids.insert_unique(new_id).second);
+```
+
