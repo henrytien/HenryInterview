@@ -3061,3 +3061,57 @@ mysqldump -h$host -P$port -u$user ---single-transaction  --set-gtid-purged=OFF d
 
 > 不加“local”，是读取服务端的文件，这个文件必须在 secure_file_priv 指定的目录或子目录下；而备库的apply线程执行时先讲csv内容读出生成tmp目录下的临时文件，这个目录容易受secure_file_priv的影响，如果备库改参数设置为Null或指定的目录，可能导致load操作失败，加local则不受这个影响。
 
+这样做的一个原因是，为了确保备库应用 binlog 正常。因为备库可能配置了 secure_file_priv=null，所以如果不用 local 的话，可能会导入失败，造成主备同步延迟。
+
+另一种应用场景是使用 mysqlbinlog 工具解析 binlog 文件，并应用到目标库的情况。你可以使用下面这条命令 ：
+
+```mysql
+mysqlbinlog $binlog_file | mysql -h$host -P$port -u$user -p$pwd
+```
+
+把日志直接解析出来发给目标库执行。增加 local，就能让这个方法支持非本地的 $host。
+
+## 42 | grant之后要跟着flush privileges吗？
+
+grant 之后真的需要执行 flush privileges 吗？如果没有执行这个 flush 命令的话，赋权语句真的不能生效吗？
+
+### 全局权限
+
+全局权限，作用于整个 MySQL 实例，这些权限信息保存在 mysql 库的 user 表里。如果我要给用户 ua 赋一个最高权限的话，语句是这么写的：
+
+```mysql
+grant all privileges on *.* to 'ua'@'%' with grant option;
+```
+
+**一般在生产环境上要合理控制用户权限的范围**。我们上面用到的这个 grant 语句就是一个典型的错误示范。如果一个用户有所有权限，一般就不应该设置为所有 IP 地址都可以访问。
+
+如果要回收上面的 grant 语句赋予的权限，你可以使用下面这条命令：
+
+```mysql
+revoke all privileges on *.* from 'ua'@'%';
+```
+
+### db 权限
+
+```mysql
+grant all privileges on db1.* to 'ua'@'%' with grant option;
+```
+
+### 表权限和列权限
+
+```mysql
+create table db1.t1(id int, a int);
+grant all privileges on db1.t1 to 'ua'@'%' with grant option;
+GRANT SELECT(id), INSERT (id,a) ON mydb.mytbl TO 'ua'@'%' with grant option;
+```
+
+**因此，正常情况下，grant 命令之后，没有必要跟着执行 flush privileges 命令。**
+
+### flush privileges 使用场景
+
+显然，当数据表中的权限数据跟内存中的权限数据不一致的时候，flush privileges 语句可以用来重建内存数据，达到一致状态。
+
+**问题**
+
+请你也来说一说，在使用数据库或者写代码的过程中，有没有遇到过类似的场景：误用了很长时间以后，由于一个契机发现“啊，原来我错了这么久”？
+
