@@ -3115,3 +3115,40 @@ GRANT SELECT(id), INSERT (id,a) ON mydb.mytbl TO 'ua'@'%' with grant option;
 
 请你也来说一说，在使用数据库或者写代码的过程中，有没有遇到过类似的场景：误用了很长时间以后，由于一个契机发现“啊，原来我错了这么久”？
 
+## 43 | 要不要使用分区表？
+
+分区表有什么问题，为什么公司规范不让使用分区表呢？
+
+```mysql
+CREATE TABLE `t` (
+  `ftime` datetime NOT NULL,
+  `c` int(11) DEFAULT NULL,
+  KEY (`ftime`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1
+PARTITION BY RANGE (YEAR(ftime))
+(PARTITION p_2017 VALUES LESS THAN (2017) ENGINE = InnoDB,
+ PARTITION p_2018 VALUES LESS THAN (2018) ENGINE = InnoDB,
+ PARTITION p_2019 VALUES LESS THAN (2019) ENGINE = InnoDB,
+PARTITION p_others VALUES LESS THAN MAXVALUE ENGINE = InnoDB);
+insert into t values('2017-4-1',1),('2018-4-1',1);
+```
+
+### 分区表的引擎层行为
+
+分区表和手工分表，一个是由 server 层来决定使用哪个分区，一个是由应用层代码来决定使用哪个分表。因此，从引擎层看，这两种方式也是没有差别的。
+
+其实这两个方案的区别，主要是在 server 层上。从 server 层看，我们就不得不提到分区表一个被广为诟病的问题：打开表的行为。
+
+### 分区表的应用场景
+
+分区表的一个显而易见的优势是对业务透明，相对于用户分表来说，使用分区表的业务代码更简洁。还有，分区表可以很方便的清理历史数据。
+
+如果一项业务跑的时间足够长，往往就会有根据时间删除历史数据的需求。这时候，按照时间分区的分区表，就可以直接通过 alter table t drop partition …这个语法删掉分区，从而删掉过期的历史数据。
+
+这个 alter table t drop partition …操作是直接删除分区文件，效果跟 drop 普通表类似。与使用 delete 语句删除数据相比，优势是速度快、对系统影响小。
+
+**小结**
+
+1. 分区并不是越细越好。实际上，单表或者单分区的数据一千万行，只要没有特别大的索引，对于现在的硬件能力来说都已经是小表了。
+2. 分区也不要提前预留太多，在使用之前预先创建即可。比如，如果是按月分区，每年年底时再把下一年度的 12 个新分区创建上即可。对于没有数据的历史分区，要及时的 drop 掉。
+
