@@ -2344,3 +2344,121 @@ InnoDB 内存管理用的是最近最少使用 (Least Recently Used, LRU) 算法
 **思考**
 
 你可以设想出由于客户端的性能问题，对数据库影响更严重的例子吗？或者你是否经历过这样的场景？你又是怎么优化的？
+
+这个问题的核心是，造成了“长事务”。
+
+至于长事务的影响，就要结合我们前面文章中提到的锁、MVCC 的知识点了。
+
+- 如果前面的语句有更新，意味着它们在占用着行锁，会导致别的语句更新被锁住；
+- 当然读的事务也有问题，就是会导致 undo log 不能被回收，导致回滚段空间膨胀。
+
+## 34 | 到底可不可以使用join？
+
+在实际生产中，关于 join 语句使用的问题，一般会集中在以下两类：
+
+1. 我们 DBA 不让使用 join，使用 join 有什么问题呢？
+2. 如果有两个大小不同的表做 join，应该用哪个表做驱动表呢？
+
+```mysql
+CREATE TABLE `t2` (
+  `id` int(11) NOT NULL,
+  `a` int(11) DEFAULT NULL,
+  `b` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `a` (`a`)
+) ENGINE=InnoDB;
+ 
+drop procedure idata;
+delimiter ;;
+create procedure idata()
+begin
+  declare i int;
+  set i=1;
+  while(i<=1000)do
+    insert into t2 values(i, i, i);
+    set i=i+1;
+  end while;
+end;;
+delimiter ;
+call idata();
+ 
+create table t1 like t2;
+insert into t1 (select * from t2 where id<=100)
+```
+
+### Index Nested-Loop Join
+
+`select * from t1 straight_join t2 on (t1.a=t2.a);`
+
+这样优化器只会按照我们指定的方式去 join。在这个语句里，t1 是驱动表，t2 是被驱动表。
+
+**怎么选择驱动表？**
+
+在这个 join 语句执行过程中，驱动表是走全表扫描，而被驱动表是走树搜索。
+
+因此整个执行过程，近似复杂度是 N + N*2*log2M。
+
+显然，N 对扫描行数的影响更大，因此应该让小表来做驱动表。
+
+1. 使用 join 语句，性能比强行拆成多个单表执行 SQL 语句的性能要好；
+2. 如果使用 join 语句的话，需要让小表做驱动表。
+
+但是，你需要注意，这个结论的前提是“可以使用被驱动表的索引”。
+
+### Simple Nested-Loop Join
+
+`select * from t1 straight_join t2 on (t1.a=t2.b);`
+
+### Block Nested-Loop Join
+
+这时候，被驱动表上没有可用的索引，算法的流程是这样的：
+
+1. 把表 t1 的数据读入线程内存 join_buffer 中，由于我们这个语句中写的是 select *，因此是把整个表 t1 放入了内存；
+2. 扫描表 t2，把表 t2 中的每一行取出来，跟 join_buffer 中的数据做对比，满足 join 条件的，作为结果集的一部分返回。
+
+如果使用 Simple Nested-Loop Join 算法进行查询，扫描行数也是 10 万行。因此，从时间复杂度上来说，这两个算法是一样的。但是，Block Nested-Loop Join 算法的这 10 万次判断是内存操作，速度上会快很多，性能也更好。
+
+应该选择哪个表做驱动表。
+
+假设小表的行数是 N，大表的行数是 M，那么在这个算法里：
+
+1. 两个表都做一次全表扫描，所以总的扫描行数是 M+N；
+2. 内存中的判断次数是 M*N。
+
+可以看到，调换这两个算式中的 M 和 N 没差别，因此这时候选择大表还是小表做驱动表，执行耗时是一样的。
+
+刚刚我们说了 N 越大，分段数 K 越大。那么，N 固定的时候，什么参数会影响 K 的大小呢？（也就是λ的大小）答案是 join_buffer_size。join_buffer_size 越大，一次可以放入的行越多，分成的段数也就越少，对被驱动表的全表扫描次数就越少。
+
+这就是为什么，你可能会看到一些建议告诉你，如果你的 join 语句很慢，就把 join_buffer_size 改大。
+
+理解了 MySQL 执行 join 的两种算法，现在我们再来试着**回答文章开头的两个问题**。
+
+第一个问题：能不能使用 join 语句？
+
+1. 如果可以使用 Index Nested-Loop Join 算法，也就是说可以用上被驱动表上的索引，其实是没问题的；
+2. 如果使用 Block Nested-Loop Join 算法，扫描行数就会过多。尤其是在大表上的 join 操作，这样可能要扫描被驱动表很多次，会占用大量的系统资源。所以这种 join 尽量不要用。
+
+所以你在判断要不要使用 join 语句时，就是看 explain 结果里面，Extra 字段里面有没有出现“Block Nested Loop”字样。
+
+```mysql
+elect t1.b,t2.* from  t1  straight_join t2 on (t1.b=t2.b) where t2.id<=100;
+select t1.b,t2.* from  t2  straight_join t1 on (t1.b=t2.b) where t2.id<=100;
+```
+
+这个例子里，表 t1 和 t2 都是只有 100 行参加 join。但是，这两条语句每次查询放入 join_buffer 中的数据是不一样的：
+
+**在决定哪个表做驱动表的时候，应该是两个表按照各自的条件过滤，过滤完成之后，计算参与 join 的各个字段的总数据量，数据量小的那个表，就是“小表”，应该作为驱动表。**
+
+### **小结**
+
+我们也得到了文章开头两个问题的答案：
+
+1. 如果可以使用被驱动表的索引，join 语句还是有其优势的；
+2. 不能使用被驱动表的索引，只能使用 Block Nested-Loop Join 算法，这样的语句就尽量不要使用；
+3. 在使用 join 的时候，应该让小表做驱动表。
+
+**思考**
+
+如果被驱动表是一个大表，并且是一个冷数据表，除了查询过程中可能会导致 IO 压力大以外，你觉得对这个 MySQL 服务还有什么更严重的影响吗？
+
+> 如果驱动表分段，那么被驱动表就被多次读，而被驱动表又是大表，循环读取的间隔肯定得超1秒，这就会导致上篇文章提到的：“数据页在LRU_old的存在时间超过1秒，就会移到young区”。最终结果就是把大部分热点数据都淘汰了，导致“Buffer pool hit rate”命中率极低，其他请求需要读磁盘，因此系统响应变慢，大部分请求阻塞。
