@@ -2892,3 +2892,88 @@ InnoDB 放弃了这个设计，语句执行失败也不回退自增 id。也正�
 
 > 在8.0.3版本后，innodb_autoinc_lock_mode默认值已是2，在binlog_format默认值为row的前提下，想来也是为了增加并发。
 
+## 40 | insert语句的锁为什么这么多？
+
+insert 语句是一个很轻量的操作。不过，这个结论对于“普通的 insert 语句”才有效。也就是说，还有些 insert 语句是属于“特殊情况”的，在执行过程中需要给其他资源加锁，或者无法在申请到自增 id 以后就立马释放自增锁。
+
+### insert … select 语句
+
+```mysql
+CREATE TABLE `t` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `c` int(11) DEFAULT NULL,
+  `d` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `c` (`c`)
+) ENGINE=InnoDB;
+ 
+insert into t values(null, 1,1);
+insert into t values(null, 2,2);
+insert into t values(null, 3,3);
+insert into t values(null, 4,4);
+ 
+create table t2 like t
+```
+
+现在，我们一起来看看为什么在可重复读隔离级别下，binlog_format=statement 时执行：
+
+```mysql
+insert into t2(c,d) select c,d from t;
+```
+
+这个问题我们需要考虑的还是日志和数据的一致性。
+
+### insert 循环写入
+
+当然了，执行 insert … select 的时候，对目标表也不是锁全表，而是只锁住需要访问的资源。
+
+如果现在有这么一个需求：要往表 t2 中插入一行数据，这一行的 c 值是表 t 中 c 值的最大值加 1。
+
+此时，我们可以这么写这条 SQL 语句 ：
+
+```mysql
+insert into t2(c,d)  (select c+1, d from t force index(c) order by c desc limit 1);
+```
+
+这个语句的加锁范围，就是表 t 索引 c 上的 (3,4] 和 (4,supremum] 这两个 next-key lock，以及主键索引上 id=4 这一行。
+
+它的执行流程也比较简单，从表 t 中按照索引 c 倒序，扫描第一行，拿到结果写入到表 t2 中。
+
+因此整条语句的扫描行数是 1。
+
+### insert 唯一键冲突
+
+一个经典的死锁场景
+
+<img src="../images/mysql40.png" style="zoom:50%;" />
+
+1. 在 T1 时刻，启动 session A，并执行 insert 语句，此时在索引 c 的 c=5 上加了记录锁。注意，这个索引是唯一索引，因此退化为记录锁。
+2. 在 T2 时刻，session B 要执行相同的 insert 语句，发现了唯一键冲突，加上读锁；同样地，session C 也在索引 c 上，c=5 这一个记录上，加了读锁。
+3. T3 时刻，session A 回滚。这时候，session B 和 session C 都试图继续执行插入操作，都要加上写锁。两个 session 都要等待对方的行锁，所以就出现了死锁。
+
+这个流程的状态变化图如下所示。
+
+<img src="../images/mysql4001.jpeg" style="zoom:50%;" />
+
+### insert into … on duplicate key update
+
+上面这个例子是主键冲突后直接报错，如果是改写成
+
+```mysql
+insert into t values(11,10,10) on duplicate key update d=100; 
+```
+
+**insert into … on duplicate key update 这个语义的逻辑是，插入一行数据，如果碰到唯一键约束，就执行后面的更新语句。**
+
+### 小结
+
+insert … select 是很常见的在两个表之间拷贝数据的方法。你需要注意，在可重复读隔离级别下，这个语句会给 select 的表里扫描到的记录和间隙加读锁。
+
+而如果 insert 和 select 的对象是同一个表，则有可能会造成循环写入。这种情况下，我们需要引入用户临时表来做优化。
+
+insert 语句如果出现唯一键冲突，会在冲突的唯一值上加共享的 next-key lock(S 锁)。因此，碰到由于唯一键约束导致报错后，要尽快提交或回滚事务，避免加锁时间过长。
+
+**问题**
+
+你平时在两个表之间拷贝数据用的是什么方法，有什么注意事项吗？在你的应用场景里，这个方法，相较于其他方法的优势是什么呢？
+
