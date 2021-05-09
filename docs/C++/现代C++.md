@@ -16,6 +16,13 @@
      ~smart_ptr(){
        delete ptr_;
      }
+     
+    smart_ptr(const smart_ptr&) = delete;
+    smart_ptr& operator=(const smart_ptr&) = delete;
+     
+    T& operator*() const { return *ptr_; }
+    T* operator->() const { return ptr_; }
+    operator bool() const { return ptr_; }
     T* get() const { return ptr_; }
    private:
      T* ptr_;
