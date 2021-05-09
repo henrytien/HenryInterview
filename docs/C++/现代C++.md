@@ -17,15 +17,35 @@
        delete ptr_;
      }
      
-    smart_ptr(const smart_ptr&) = delete;
-    smart_ptr& operator=(const smart_ptr&) = delete;
-     
+    // smart_ptr(const smart_ptr&) = delete;
+    // smart_ptr& operator=(const smart_ptr&) = delete;
+    smart_ptr(smart_ptr&& other) 
+    {
+    		ptr_ = other.release();  
+    } 
+    smart_ptr& operator=(smart_ptr rhs)
+    {
+      rhs.swap(*this);
+      return *this;
+    }
+    
     T& operator*() const { return *ptr_; }
     T* operator->() const { return ptr_; }
     operator bool() const { return ptr_; }
     T* get() const { return ptr_; }
    private:
      T* ptr_;
+   }
+   
+   int main() {
+     smart_ptr<shape> ptr1{create_shape(shape_type::cycle)};
+     smart_ptr<shape> ptr2{ptr1}; //编译错误
+     smart_ptr<shape> ptr3;
+     
+     ptr3 = ptr1;	// 编译错误
+     ptr3 = std::move(ptr1); // ok
+     smart_ptr<shape> ptr4{std::move(ptr3)}; // ok
+     // 这里你看出这个类似哪个智能指针的行为了呢？
    }
    ```
 
