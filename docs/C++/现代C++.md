@@ -35,7 +35,7 @@
     T* get() const { return ptr_; }
    private:
      T* ptr_;
-   }
+   };
    
    int main() {
      smart_ptr<shape> ptr1{create_shape(shape_type::cycle)};
@@ -49,6 +49,52 @@
    }
    ```
 
-   
+2. 你可以实现一个子类指针向基类指针转换么？
 
-2. 
+   ```c++
+   template	<typename U>
+   smart_ptr(smart_ptr<U>&& other)
+   {
+    		ptr_ = other.release();
+   }
+   ```
+
+3. 你能接着实现一个引用计数接口么？
+
+   ```c++
+   class shared_count{
+   public:
+   	shared_count();
+   	void add_count();
+   	long reduce_count();
+   	long get_count() const();
+   };
+   ```
+
+4. 现在需要你实现非线程安全的引用计数接口？
+
+   ```c++
+   class shared_count{
+   public:
+   	shared_count():count_(1){}
+   	void add_count()
+   	{
+   			++count_;
+   	}
+   	
+   	long reduce_count()
+   	{
+   			--count_;
+   	}
+   	
+   	long get_count() const{
+   			return count_;
+   	}
+   	
+   private:
+   long count_;
+   };
+   ```
+
+5. 现在你需要把之前的构造函数和析构函数进行修改，可以支持引用计数能实现么？
+
