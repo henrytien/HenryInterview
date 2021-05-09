@@ -101,3 +101,28 @@
 
 5. 现在你需要把之前的构造函数和析构函数进行修改，可以支持引用计数能实现么？
 
+   ```c++
+   template <typename T>
+   class smart_ptr {
+   public:
+       explicit smart_ptr(T* ptr = nullptr)
+       :ptr_(ptr) {
+           if (ptr) {
+               shared_count_ = new shared_count();
+           }
+       }
+       ~smart_ptr(){
+           if (ptr_ && !shared_count_->reduce_count())
+           {
+               delete ptr_;
+               delete shared_count_;
+           }
+       }
+   private:
+       T* ptr_;
+       shared_count* shared_count_;
+   };
+   ```
+
+   
+
