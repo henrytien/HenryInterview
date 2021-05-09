@@ -9,90 +9,93 @@
 
    ```c++
    template <typename T>
-   class smart_ptr{
+   class smart_ptr {
    public:
-   	explicit smart_ptr(T* ptr = nullptr)
-       :ptr_(ptr){}
-     ~smart_ptr(){
-       delete ptr_;
-     }
-     
-    // smart_ptr(const smart_ptr&) = delete;
-    // smart_ptr& operator=(const smart_ptr&) = delete;
-    smart_ptr(smart_ptr&& other) 
-    {
-    		ptr_ = other.release();  
-    } 
-    smart_ptr& operator=(smart_ptr rhs)
-    {
-      rhs.swap(*this);
-      return *this;
-    }
-    
-    T& operator*() const { return *ptr_; }
-    T* operator->() const { return ptr_; }
-    operator bool() const { return ptr_; }
-    T* get() const { return ptr_; }
+       explicit smart_ptr(T *ptr = nullptr)
+           : ptr_(ptr) {}
+       ~smart_ptr()
+       {
+           delete ptr_;
+       }
+   
+       // smart_ptr(const smart_ptr&) = delete;
+       // smart_ptr& operator=(const smart_ptr&) = delete;
+       smart_ptr(smart_ptr &&other)
+       {
+           ptr_ = other.release();
+       }
+       smart_ptr &operator=(smart_ptr rhs)
+       {
+           rhs.swap(*this);
+           return *this;
+       }
+   
+       T &operator*() const { return *ptr_; }
+       T *operator->() const { return ptr_; }
+       operator bool() const { return ptr_; }
+       T *get() const { return ptr_; }
+   
    private:
-     T* ptr_;
+       T *ptr_;
    };
    
    int main() {
-     smart_ptr<shape> ptr1{create_shape(shape_type::cycle)};
-     smart_ptr<shape> ptr2{ptr1}; //编译错误
-     smart_ptr<shape> ptr3;
-     
-     ptr3 = ptr1;	// 编译错误
-     ptr3 = std::move(ptr1); // ok
-     smart_ptr<shape> ptr4{std::move(ptr3)}; // ok
-     // 这里你看出这个类似哪个智能指针的行为了呢？
+       smart_ptr<shape> ptr1{create_shape(shape_type::cycle)};
+       smart_ptr<shape> ptr2{ptr1}; //编译错误
+       smart_ptr<shape> ptr3;
+   
+       ptr3 = ptr1;                            // 编译错误
+       ptr3 = std::move(ptr1);                 // ok
+       smart_ptr<shape> ptr4{std::move(ptr3)}; // ok
+                                               // 这里你看出这个类似哪个智能指针的行为了呢？
    }
    ```
 
 2. 你可以实现一个子类指针向基类指针转换么？
 
    ```c++
-   template	<typename U>
-   smart_ptr(smart_ptr<U>&& other)
+   template <typename U>
+   smart_ptr(smart_ptr<U> &&other)
    {
-    		ptr_ = other.release();
+       ptr_ = other.release();
    }
    ```
 
 3. 你能接着实现一个引用计数接口么？
 
    ```c++
-   class shared_count{
+   class shared_count {
    public:
-   	shared_count();
-   	void add_count();
-   	long reduce_count();
-   	long get_count() const();
+       shared_count();
+       void add_count();
+       long reduce_count();
+       long get_count() const();
    };
    ```
 
 4. 现在需要你实现非线程安全的引用计数接口？
 
    ```c++
-   class shared_count{
+   class shared_count {
    public:
-   	shared_count():count_(1){}
-   	void add_count()
-   	{
-   			++count_;
-   	}
-   	
-   	long reduce_count()
-   	{
-   			--count_;
-   	}
-   	
-   	long get_count() const{
-   			return count_;
-   	}
-   	
+       shared_count() : count_(1) {}
+       void add_count()
+       {
+           ++count_;
+       }
+   
+       long reduce_count()
+       {
+           --count_;
+       }
+   
+       long get_count() const
+       {
+           return count_;
+       }
+   
    private:
-   long count_;
+       long count_;
    };
    ```
 
