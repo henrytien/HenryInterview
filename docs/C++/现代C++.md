@@ -111,7 +111,7 @@
                shared_count_ = new shared_count();
            }
        }
-       ~smart_ptr(){
+       ~smart_ptr() {
            if (ptr_ && !shared_count_->reduce_count())
            {
                delete ptr_;
@@ -132,6 +132,20 @@
        using std::swap;
        swap(ptr_,rhs.ptr_);
        swap(shared_count_, rhs.shared_count_);
+   }
+   ```
+
+7. 你需要对照修改拷贝构造函数和移动构造函数，为其添加引用计数？
+
+   ```c++
+   template <typename U>
+   smart_ptr(const smart_ptr<U>& other){ 
+       ptr_ = other.ptr_;
+       if (ptr_)
+       {
+           other.shared_count_->add_count();
+           shared_count_ = other.shared_count_;
+       }
    }
    ```
 
