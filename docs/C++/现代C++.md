@@ -124,5 +124,16 @@
    };
    ```
 
+6. 你可以添加一个swap函数么？
+
+   ```c++
+   void swap(smart_ptr& rhs) 
+   {
+       using std::swap;
+       swap(ptr_,rhs.ptr_);
+       swap(shared_count_, rhs.shared_count_);
+   }
+   ```
+
    
 
