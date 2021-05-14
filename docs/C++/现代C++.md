@@ -221,5 +221,16 @@
     }
     ```
 
+12. 你可以实现一下dynamic_cast_ptr么，需要考虑那些，当然是需要支持模板的？
+
+    ```c++
+    template <typename T, typename U>
+    smart_ptr<T> dynamic_cast_ptr (const smart_ptr<T>& other)
+    {
+        T* ptr = dynamic_cast<T*>(other.get());
+        return smart_ptr<T*>(other,ptr);
+    }
+    ```
+
     
 
