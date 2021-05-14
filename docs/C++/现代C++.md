@@ -149,5 +149,77 @@
    }
    ```
 
+8. 这里能够正确编译么？
+
+   ```c++
+   template <typename U>
+   smart_ptr (const smart_ptr<U>& other) {
+       ptr_ = other.ptr_;
+       if (ptr_) {
+           other.shared_count_->add_count();
+           shared_count_ = other.shared_count_;
+       }
+   }
    
+   template <typename U>
+   smart_ptr (const smart_ptr<U>&& other) {
+       ptr_ = other.ptr_;
+       if (ptr_) {
+           shared_count_ = other.shared_count_;
+           ptr_ = nullptr;
+       }
+   }
+   ```
+
+9. 这里需要定义一个友元类？
+
+   ```c++
+   template <typename T>
+   friend class smart_ptr;
+   ```
+
+10. 如何优化release函数手工释放的问题呢？
+
+    ```c++
+    long use_count() const {
+        if (ptr_) {
+            return shared_count_->get_count();
+        } else {
+            return 0;
+        }
+    }
+    ```
+
+11. 你可以简单写一个实列调用的函数么？
+
+    ```c++
+    class shape {
+    public:
+       virtual ~shape ()
+    };
+    
+    class circle : shape { 
+    public:
+        ~shape () {
+            puts("~cirlce ");
+        }
+    };
+    
+    int main() {
+        smart_ptr<circle> ptr1(new circle);
+        printf("use count of the ptr1 is %ld ", ptr1.use_count());
+    
+        smart_ptr<circle> ptr2;
+        printf("use count of the ptr2 is %ld", ptr2.use_count());
+    
+        ptr2 = ptr1;
+        printf("use count of the ptr2 is %ld", ptr2.use_count());
+    
+        if (ptr1) {
+            printf("use count of the ptr1 is not empty");
+        }
+    }
+    ```
+
+    
 
