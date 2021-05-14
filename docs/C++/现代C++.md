@@ -228,7 +228,7 @@
     smart_ptr<T> dynamic_cast_ptr (const smart_ptr<T>& other)
     {
         T* ptr = dynamic_cast<T*>(other.get());
-        return smart_ptr<T*>(other,ptr);
+        return smart_ptr<T>(other,ptr);
     }
     ```
 
