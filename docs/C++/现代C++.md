@@ -293,5 +293,29 @@
    };
    ```
 
-2. 
+## 06 | 异常：用还是不用，这是个问题
+
+## 07 | 迭代器和好用的新for循环
+
+1. 会写一个简洁的输入行迭代器么？
+
+   ```c++
+   for (const string& line:
+           istream_line_reader(is)) {
+               cout << line << endl;
+   }
+   ```
+
+## 08 | 易用性改进 I：自动类型推断和初始化
+
+1. 结构化绑定？
+
+   ```c++
+   auto [lower,upper] = mmp.equal_range("four");
+   ```
+
+## 09 | 易用性改进 II：字面量、静态断言和成员函数说明符
+
+1. 二进制字面量有了解和使用么？
+2. override和final 说明符有用过么？
 
