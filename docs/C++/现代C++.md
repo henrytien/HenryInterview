@@ -274,5 +274,24 @@
 
 10. 为什么`smart_ptr::operator=`对左值和右值都有效，而且不需要对等号两边是否引用同一对象进行判断？
 
-    
+## 04 | 容器汇编 I：比较简单的若干容器
+
+1. 你有使用`noexcept`关键字么？在拷贝构造和移动构造的时候有什么缺别？
+2. 你熟悉的list成员函数有哪些呢？list底层实现是什么？
+3. 你了解内存管理的栈和普通stack有什么区别么？
+
+## 05 | 容器汇编 II：需要函数对象的容器
+
+1. 你可以写一个关于`less`函数的模板么？
+
+   ```c++
+   template <class T>
+   struct less:binary_function<T,T,bool> {
+       bool operator() (const T& x,const T& y) const {
+           return x < y;
+       }
+   };
+   ```
+
+2. 
 
