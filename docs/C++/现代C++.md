@@ -319,3 +319,35 @@
 1. 二进制字面量有了解和使用么？
 2. override和final 说明符有用过么？
 
+## 10 | 到底应不应该返回对象？
+
+## 11 | Unicode：进入多文字支持的世界
+
+## 12 | 编译期多态：泛型编程和模板入门
+
+## 13 | 编译期能做些什么？一个完整的计算世界
+
+1. fmap函数模板编程会么？
+
+   ```c++
+   template < template <typename, typename>
+           class OutContainer = vector,
+           typename F, class R>
+   auto fmap(F&& f, R&& inputs) 
+   {
+       typedef decay_t<decltype(
+           f(*inputs.begin())) > 
+           result_type;
+           OutContainer<
+           result_type,
+           allocator<result_type>>
+           result;
+       for (auto&& item : inputs) {
+           result.push_back(f(item));
+       }
+       return result;
+   }
+   ```
+
+   
+
