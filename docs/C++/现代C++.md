@@ -349,5 +349,73 @@
    }
    ```
 
+## 14 | SFINAE：不是错误的替换失败是怎么回事?
+
+1. 编译期成员监测？
+2. 标签分发理解么？
+
+## 15 | constexpr：一个常态的世界
+
+1. 如何检验一个constexpr函数能不能产生一个真正的编译器常量？
+
+2. constexpr和const的区别？
+
+3. 你能修正下满这个错误么？
+
+   ```c++
+   #include <iostream>
+   #include <vector>
+   
+   struct magic {
+       static const int number = 521;
+   };
+   
+   int main() {
+       std::vector<int> v;
+       v.emplace_back(magic::number);
+       std::cout << v[0] << std::endl;
+   }
+   ```
+
+## 16 | 函数对象和lambda：进入函数式编程
+
+1. 你可以简单的写一个Lambda表达式么？
+
+   ```c++
+   auto add_2 = [](int x) {
+       return x + 2;
+   };
+   ```
+
+   一个通用的adder
+
+   ```c++
+   auto adder = [](int n) {
+       return [n](int x) {
+           return x + n;
+       };
+   };
+   ```
+
+   `[](int x) { return x * x; } (3)`
+
+   ```c++
+   #include <array>
+   #include <iostream>
+   #include <numeric>
+   
+   using namespace std;
+   
+   int main() {
+       array a{1, 2, 3, 4, 5};
+       auto s = accumulate(
+           a.begin(), a.end(), 0,
+           [](auto x, auto y) {
+               return x + y;
+           });
+       cout << s << endl;
+   }
+   ```
+
    
 
