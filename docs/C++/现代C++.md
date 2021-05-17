@@ -420,5 +420,22 @@
 ## 17 | 函数式编程：一种越来越流行的编程范式
 
 1. 你能说说函数式编程的特点么？
+
+## 18 | 应用可变模板和tuple的编译期技巧
+
+1. 你会使用转发模板用法么？
+
+   ```c++
+   template <typename T, 
+               typename... Args>
+   inline unique_ptr<T>
+   make_unique(Args&&... args)
+   {
+       return unique_ptr<T>(
+           new T(forward<Args>(args)...));
+   }
+   // make_unique<vector<int>>(100,1);
+   ```
+
 2. 
 
