@@ -236,6 +236,72 @@
 
 14. 从上面你能看出smart_ptr还缺点什么吗？
 
+15. 你能实现一个string类么？
+
+```c++
+class String{
+public:
+    // 默认构造函数
+    String(const char *str=nullptr);
+    // 拷贝构造函数
+    String(const String &str);
+    // 析构函数
+    ~String();
+    // 字符串赋值函数
+    String& operator =(const String& str);
+private:
+    char *m_data;
+    int m_size;
+};
+
+// 构造函数
+String::String(const char* str) {
+    if (str == nullptr) {
+        m_data = new char[1];
+        // 这里是细节
+        m_data[0] = '\0';
+        m_size = 0;
+    } else {
+        len = strlen(str);
+        m_data = new char[len+1];
+        m_size = len;
+        strcpy(m_data, str);
+    }
+}
+
+// 拷贝构造函数
+String::String(const String &str) {
+    m_size = str.m_size;
+    m_data = new char[m_size+1];
+    // 这里依然是一个细节
+    if (str.m_data != NULL) {
+        strcpy(m_data, str.m_data);
+    }
+}
+// 析构函数
+String::~String() {
+    delete[] m_data;
+    m_size = 0;
+}
+
+// 赋值操作符有很多细节
+// 考虑异常安全
+String& String::operator =(const String &str) {
+    // 防止自赋值
+    if (&str != this) {
+        String strTemp(str);
+
+        // 这里为什么不直接使用new，防止内存不够，抛出异常
+        char* pTemp = strTemp.m_data;
+        strTemp.m_data = m_data;
+        m_data = pTemp;
+    }
+    return *this;
+}
+```
+
+
+
 ## 03 | 右值和移动究竟解决了什么问题？
 
 1. 你知道左值是什么？
