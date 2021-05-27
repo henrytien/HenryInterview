@@ -665,7 +665,30 @@ String& String::operator =(const String &str) {
    }
    ```
 
+   > 在调用 `f.get()` 之前，执行了 `std::packaged_task`，否则你的程序会一直阻塞在那。
+
+   [区别][1]
+
+   [异步编程](2)
+
 ## 20 | 内存模型和atomic：理解并发的复杂性
+
+
+
+
+
+
+
+## 参考资料
+
+[1]:https://blog.csdn.net/weiwei9363/article/details/106418146	"csdn"
+[2]: https://zhuanlan.zhihu.com/p/78612487	"知乎"
+
+
+
+
+
+
 
 
 
