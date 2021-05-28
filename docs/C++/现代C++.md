@@ -675,9 +675,28 @@ String& String::operator =(const String &str) {
 
 
 
+1. volatitle关键字了解二么？
 
+2. 你知道如何在多线程内保证内存访问顺序吗？内存屏障有听说过么？
 
+   ```c++
+   #include<atomic>
+   #include<iostream>
+   using namespace std;
+   int main() {
+       atomic<int> y;
+       int x =1;
+       y.store(2,memory_order_release);
+   
+       if (y.load(memory_order_acquire) == 2) {
+           x = 3;
+           y.store(4,memory_order_relaxed);
+       }
+       return 0;
+   }
+   ```
 
+3. 
 
 ## 参考资料
 
