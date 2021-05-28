@@ -696,12 +696,65 @@ String& String::operator =(const String &str) {
    }
    ```
 
-3. 
+3. 你可以实现一个`atomic`版本的线程安全单例？
+
+   ```c++
+   #include<atomic>
+   #include<mutex>
+   
+   using namespace std;
+   
+   class Singleton {
+   public:
+       static Singleton* instance();
+   private:
+       // Singleton() {}
+       // ~Singleton(){}
+       // Singleton(const Singleton& signal);
+       // Singleton& operator= (const Singleton& signal);
+       static atomic<Singleton*> ins_ptr_;
+       static mutex lock_;
+   };
+   
+   atomic<Singleton*> Singleton::ins_ptr_;
+   std::mutex Singleton::lock_;
+   
+   Singleton* Singleton::instance() {
+       Singleton* ptr = Singleton::ins_ptr_.load(memory_order_acquire);
+       if (ptr == nullptr) {
+           lock_guard<mutex> {Singleton::lock_};
+           ptr = Singleton::ins_ptr_.load(memory_order_relaxed);
+           if (ptr == nullptr) {
+               ptr = new Singleton();
+               Singleton::ins_ptr_.store(ptr, memory_order_release);
+           }
+       }
+       return Singleton::ins_ptr_;
+   }
+   
+   int main() {
+       Singleton* ptr = Singleton::instance();
+       return 0;
+   }
+   ```
+
+4. 你会怎么样实现一个并发队列？
+
+   - 对于单生产者、单消费者，可以用用原子量和获得、释放语义就能简单实现。
+   - 对于多生产者、多消费者的情况，那么实现就比较复杂，一般会使用`compare_exchange_strong`或`compare_exchange_week`。
+
+   [github参考1][4]
+
+   [github参考2][3]
+
+   
 
 ## 参考资料
 
 [1]:https://blog.csdn.net/weiwei9363/article/details/106418146	"csdn"
 [2]: https://zhuanlan.zhihu.com/p/78612487	"知乎"
+[3]:https://github.com/cameron314/concurrentqueue	"无锁多生产者多消费者并发队列"
+[4]:https://github.com/adah1972/nvwa/blob/master/nvwa/fc_queue.h	"单生产者单消费者并发队列"
 
 
 
