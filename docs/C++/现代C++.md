@@ -749,7 +749,11 @@ String& String::operator =(const String &str) {
 
 ## 21 | 工具漫谈：编译、格式化、代码检查、排错各显身手
 
+1. Clang-Format
 
+   [clang-format](https://github.com/adah1972/nvwa/blob/master/.clang-format)
+
+   
 
 ## 参考资料
 
