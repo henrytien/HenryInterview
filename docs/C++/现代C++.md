@@ -753,7 +753,19 @@ String& String::operator =(const String &str) {
 
    [clang-format](https://github.com/adah1972/nvwa/blob/master/.clang-format)
 
-   
+2. Cppcheck
+
+3. Valgrind
+
+4. Compiler Explorer
+
+5. C++ Insight
+
+## 22 | 处理数据类型变化和错误：optional、variant、expected和Herbception
+
+1. optional 是干什么的呢？
+2. variant和union有什么区别？
+3. 
 
 ## 参考资料
 
