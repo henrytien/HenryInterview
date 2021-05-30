@@ -1,7 +1,7 @@
 #include"thread_base.h"
 
 
-ThreadBase::ThreadBase(){
+ThreadBase::ThreadBase():auto_delete_(false){
     std::cout << "Thread ...\n"; 
 }
 ThreadBase::~ThreadBase(){
@@ -23,5 +23,12 @@ void* ThreadBase::thread_routine(void* arg) {
     // static_cast的作用在这里是将派生类指针转换为基类指针
     ThreadBase* t = static_cast<ThreadBase*>(arg);
     t->run();
+    if (t->auto_delete_) {
+        delete t;
+    }
     return NULL;
+}
+
+void ThreadBase::set_auto_delete(bool auto_delete) {
+    auto_delete_ = auto_delete;
 }
