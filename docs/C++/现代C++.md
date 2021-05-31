@@ -783,6 +783,20 @@ String& String::operator =(const String &str) {
 
 ## 23 | 数字计算：介绍线性代数和数值计算库
 
+1. Armadillo
+
+   CentOS下安装：`sudo yum install armadillo-devel`
+
+   MacOS下安装：`brew install armadillo`
+
+## 24 | Boost：你需要的“瑞士军刀”
+
+1. Boost.TypeIndex
+2. Boost::noncopyble
+3. Boost::static_assert 编译器断言
+
+
+
 ## 28 | Concepts：如何对模板进行约束?
 
 1. 你有了解concepts么？
