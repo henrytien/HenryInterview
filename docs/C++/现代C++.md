@@ -764,8 +764,30 @@ String& String::operator =(const String &str) {
 ## 22 | 处理数据类型变化和错误：optional、variant、expected和Herbception
 
 1. optional 是干什么的呢？
+
 2. variant和union有什么区别？
-3. 
+
+   ```c++
+   #include<iostream>
+   #include<string>
+   #include<variant>
+   using namespace std;
+   int main() {
+       
+       variant<string,int,char> obj {
+       "Hello World"};
+       cout << get<string>(obj) << endl;
+       return 0;
+   }
+   ```
+
+## 23 | 数字计算：介绍线性代数和数值计算库
+
+## 28 | Concepts：如何对模板进行约束?
+
+1. 你有了解concepts么？
+
+   
 
 ## 参考资料
 
