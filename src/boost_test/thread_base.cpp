@@ -18,7 +18,7 @@ void* ThreadBase::thread_routine(void* arg) {
     // 这里可以直接调用run()方法么？
     // 这里要思考如何获取this指针
     // static_cast的作用在这里是将派生类指针转换为基类指针
-    ThreadBase* t = static_cast<ThreadBase*>(arg);
+    ThreadBase* t = (ThreadBase*)(arg);
     t->run();
     if (t->auto_delete_) {
         delete t;
