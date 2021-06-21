@@ -795,12 +795,16 @@ String& String::operator =(const String &str) {
 2. Boost::noncopyble
 3. Boost::static_assert 编译器断言
 
+## 27 | C++ REST SDK：使用现代C++开发网络应用
+
 
 
 ## 28 | Concepts：如何对模板进行约束?
 
 1. 你有了解concepts么？
 
+   从基本概念上来讲，“概念”就是一组对模板参数的约束条件。
+   
    
 
 ## 参考资料
